@@ -6,10 +6,10 @@ export function yearSeriesCsv(
   eave: YearSunPoint[],
   compare: YearSunPoint[],
 ): string {
-  const eaveByDay = new Map(eave.map((p) => [p.dayOfYear, p.doseMh]))
-  const cmpByDay = new Map(compare.map((p) => [p.dayOfYear, p.doseMh]))
+  const eaveByDay = new Map(eave.map((p) => [p.dayOfYear, p.heatKwh]))
+  const cmpByDay = new Map(compare.map((p) => [p.dayOfYear, p.heatKwh]))
   const lines = [
-    'Day,Date,This awning m·h,Eave m·h,Compare m·h',
+    'Day,Date,This awning kWh/m,Eave kWh/m,Compare kWh/m',
     `Peak day,,${yearSeriesPeak(series).toFixed(3)},${yearSeriesPeak(eave).toFixed(3)},${
       compare.length ? yearSeriesPeak(compare).toFixed(3) : ''
     }`,
@@ -20,7 +20,7 @@ export function yearSeriesCsv(
       const label = formatDate(year, p.dayOfYear).label.replace(/,/g, '')
       const eaveV = eaveByDay.get(p.dayOfYear)
       const cmpV = cmpByDay.get(p.dayOfYear)
-      return `${p.dayOfYear},${label},${p.doseMh.toFixed(3)},${
+      return `${p.dayOfYear},${label},${p.heatKwh.toFixed(3)},${
         eaveV == null ? '' : eaveV.toFixed(3)
       },${cmpV == null ? '' : cmpV.toFixed(3)}`
     }),

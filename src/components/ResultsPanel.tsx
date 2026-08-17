@@ -6,7 +6,7 @@ type ResultsPanelProps = {
 }
 
 export function ResultsPanel({ model }: ResultsPanelProps) {
-  const { reach, sun, prof, daily } = model
+  const { reach, sun, prof, daily, heatKw } = model
 
   let tone = 'none'
   if (reach.status === 'enters' || reach.status === 'door-limited') tone = 'sun'
@@ -72,21 +72,20 @@ export function ResultsPanel({ model }: ResultsPanelProps) {
             0 <span>awning {model.length.toFixed(1)} m</span>
           </div>
         </div>
-        <div className={`metric${daily.doseMh > 0 ? ' sun' : ' none'}`}>
-          <div className="kicker">Daily indoor sun</div>
+        <div className={`metric${daily.heatKwh > 0 ? ' sun' : ' none'}`}>
+          <div className="kicker">Heat through the glass</div>
           <div className="big">
-            {daily.doseMh.toFixed(2)} <small>m·h</small>
+            {daily.heatKwh.toFixed(2)} <small>kWh/m</small>
           </div>
           <div className="sub">
+            Now {heatKw.toFixed(2)} kW/m
             {daily.hoursInside > 0
-              ? `${daily.hoursInside.toFixed(1)} h through the door · deepest ${daily.maxReach.toFixed(2)} m`
-              : 'No sun through this door today'}
+              ? ` · ${daily.hoursInside.toFixed(1)} h in · peak ${daily.maxHeatKw.toFixed(2)} kW/m`
+              : ' · no beam through the door today'}
           </div>
           <div className="sub">
-            Reach × face-on × hours. Sun that hits the back wall still counts.
-            {daily.hoursUnderAwning > 0
-              ? ` Under awning up to ${daily.maxAwningEnter.toFixed(2)} m for ${daily.hoursUnderAwning.toFixed(1)} h.`
-              : ''}
+            Energy per metre of glass width, clear sky, including air mass and glass.
+            Multiply by your door width for a room total.
           </div>
         </div>
       </div>
@@ -111,6 +110,9 @@ export function ResultsPanel({ model }: ResultsPanelProps) {
         </div>
         <div>
           Under awning <strong>{metres(reach.awningEnter)}</strong>
+        </div>
+        <div>
+          Heat now <strong>{heatKw.toFixed(2)} kW/m</strong>
         </div>
       </div>
     </>

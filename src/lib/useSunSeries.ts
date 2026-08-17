@@ -137,9 +137,9 @@ export function useSunSeries(inputs: Inputs) {
     })
   }, [yearInputs])
   const yearAxisMax = useMemo(() => {
-    const eavePeak = eaveYear.reduce((m, p) => Math.max(m, p.doseMh), 0)
-    const awningPeak = yearSeries.reduce((m, p) => Math.max(m, p.doseMh), 0)
-    const comparePeak = compareYear.reduce((m, p) => Math.max(m, p.doseMh), 0)
+    const eavePeak = eaveYear.reduce((m, p) => Math.max(m, p.heatKwh), 0)
+    const awningPeak = yearSeries.reduce((m, p) => Math.max(m, p.heatKwh), 0)
+    const comparePeak = compareYear.reduce((m, p) => Math.max(m, p.heatKwh), 0)
     return niceChartMax(Math.max(eavePeak, awningPeak, comparePeak))
   }, [eaveYear, yearSeries, compareYear])
   const dayCurve = useMemo(

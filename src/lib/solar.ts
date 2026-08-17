@@ -53,6 +53,8 @@ export type SunReach = {
   backWallHeight: number
   /** Floor distance from the outer fascia inward that is in sun under the awning. */
   awningEnter: number
+  /** Unshaded height of the glass, metres. 0 if the awning blocks the beam. */
+  openingM: number
   status: ReachStatus
   message: string
 }
@@ -462,6 +464,7 @@ export function sunReach(opts: ReachInput): SunReach {
     hitsBack: false,
     backWallHeight: 0,
     awningEnter: 0,
+    openingM: 0,
   }
 
   if (heightEnd <= 0) {
@@ -477,8 +480,15 @@ export function sunReach(opts: ReachInput): SunReach {
         : 'Sun is beside or behind the house — not through this door'
     return { ...base, status: 'off-facade', reach: 0, message }
   }
+  const opening = Math.max(0, Math.min(doorHeight, heightWall))
   if (!(profile > 0.05)) {
-    return { ...base, awningEnter: length, status: 'low', message: 'Sun too low' }
+    return {
+      ...base,
+      awningEnter: length,
+      openingM: opening,
+      status: 'low',
+      message: 'Sun too low',
+    }
   }
 
   const tanP = Math.tan(toRad(profile))
@@ -486,7 +496,10 @@ export function sunReach(opts: ReachInput): SunReach {
   base.yWall = yWall
   base.awningEnter = Math.min(length, Math.max(0, heightEnd / tanP))
 
-  function finish(raw: number, extra: { status: ReachStatus; message: string; yWall?: number | null }) {
+  function finish(
+    raw: number,
+    extra: { status: ReachStatus; message: string; yWall?: number | null; openingM: number },
+  ) {
     const hitsBack = raw > depth
     // Floor metres up to the back wall, then the height of the patch on
     // that wall. Do not keep the virtual floor past the house — at low
@@ -503,30 +516,32 @@ export function sunReach(opts: ReachInput): SunReach {
       reach,
       hitsBack,
       backWallHeight,
+      openingM: extra.openingM,
       status: extra.status,
       message,
     }
   }
 
   if (yWall <= 0) {
-    return { ...base, status: 'full-shade', reach: 0, message: 'Full shade on the floor' }
+    return { ...base, status: 'full-shade', reach: 0, openingM: 0, message: 'Full shade on the floor' }
   }
 
-  const opening = Math.max(0, Math.min(doorHeight, heightWall))
   if (opening <= 0) {
-    return { ...base, status: 'no-opening', reach: 0, message: 'Door height is zero' }
+    return { ...base, status: 'no-opening', reach: 0, openingM: 0, message: 'Door height is zero' }
   }
 
   if (yWall >= opening) {
     return finish(opening / tanP, {
       status: 'door-limited',
       message: 'Awning does not shade the opening; limited by door head',
+      openingM: opening,
     })
   }
 
   return finish(yWall / tanP, {
     status: 'enters',
     message: 'Sun enters under the awning',
+    openingM: yWall,
   })
 }
 
@@ -540,11 +555,42 @@ export function facadeIntensity(alt: number, azDiff: number): number {
   return Math.max(0, Math.cos(toRad(alt)) * Math.cos(toRad(azDiff)))
 }
 
+/** Kasten–Young optical air mass. Large at the horizon, 1 at the zenith. */
+export function airMass(alt: number): number {
+  if (alt <= 0) return Number.POSITIVE_INFINITY
+  return 1 / (Math.sin(toRad(alt)) + 0.50572 * (alt + 6.07995) ** -1.6364)
+}
+
+/**
+ * Clear-sky beam relative to zenith. Morning/evening air mass knocks this down.
+ * Meinel transmittance, normalised so a 90° sun is 1.
+ */
+export function relativeBeam(alt: number): number {
+  if (alt <= 0) return 0
+  const trans = 0.7 ** airMass(alt) ** 0.678
+  return trans / 0.7
+}
+
+/** Clear-sky beam at zenith, kW/m², after the atmosphere. */
+export const CLEAR_BEAM_ZENITH_KW = 0.9
+/** Typical clear glass solar heat gain. */
+export const GLASS_SHGC = 0.7
+
+/**
+ * Incoming heat through the unshaded glass, kW per metre of opening width.
+ * Not reach × face-on — that double-counted a long weak morning stripe.
+ */
+export function heatKwPerM(alt: number, azDiff: number, openingM: number): number {
+  if (openingM <= 0) return 0
+  return CLEAR_BEAM_ZENITH_KW * GLASS_SHGC * relativeBeam(alt) * facadeIntensity(alt, azDiff) * openingM
+}
+
 export type DailySun = {
-  /** Metre-hours: Σ reach × face-on intensity × hours. */
-  doseMh: number
+  /** Heat through the glass, kWh per metre of opening width. */
+  heatKwh: number
   hoursInside: number
   maxReach: number
+  maxHeatKw: number
   maxAwningEnter: number
   hoursUnderAwning: number
   minProfile: number | null
@@ -616,14 +662,16 @@ function observeDoor(sample: DailySunSample, mins: number) {
     (hit.status === 'enters' || hit.status === 'door-limited') && hit.reach > 0
   const intensity = enters ? facadeIntensity(sun.alt, prof.azDiff) : 0
   const indoorM = enters ? hit.reach : 0
-  return { sun, prof, hit, enters, intensity, indoorM, indoor: indoorM * intensity }
+  const heatKw = heatKwPerM(sun.alt, prof.azDiff, hit.openingM)
+  return { sun, prof, hit, enters, intensity, indoorM, heatKw, indoor: indoorM * intensity }
 }
 
 export function computeDailySun(sample: DailySunSample): DailySun {
-  let doseMh = 0
+  let heatKwh = 0
   let minutesInside = 0
   let minutesUnder = 0
   let maxReach = 0
+  let maxHeatKw = 0
   let maxAwningEnter = 0
   let minProfile: number | null = null
   let maxProfile: number | null = null
@@ -634,18 +682,22 @@ export function computeDailySun(sample: DailySunSample): DailySun {
       minutesUnder += slot.dtMin
       if (obs.hit.awningEnter > maxAwningEnter) maxAwningEnter = obs.hit.awningEnter
     }
+    if (obs.heatKw > 0) {
+      heatKwh += obs.heatKw * (slot.dtMin / 60)
+      minutesInside += slot.dtMin
+      if (obs.heatKw > maxHeatKw) maxHeatKw = obs.heatKw
+    }
     if (!obs.enters) continue
-    doseMh += obs.indoor * (slot.dtMin / 60)
-    minutesInside += slot.dtMin
     if (obs.indoorM > maxReach) maxReach = obs.indoorM
     minProfile = minProfile == null ? obs.prof.profile : Math.min(minProfile, obs.prof.profile)
     maxProfile = maxProfile == null ? obs.prof.profile : Math.max(maxProfile, obs.prof.profile)
   }
 
   return {
-    doseMh,
+    heatKwh,
     hoursInside: minutesInside / 60,
     maxReach,
+    maxHeatKw,
     maxAwningEnter,
     hoursUnderAwning: minutesUnder / 60,
     minProfile,
@@ -658,7 +710,7 @@ export type DaySunPoint = {
   reach: number
   awningEnter: number
   intensity: number
-  indoor: number
+  heatKw: number
 }
 
 /** Indoor reach vs clock time for one day. Time slider is only a marker. */
@@ -670,43 +722,43 @@ export function computeDayCurve(sample: DailySunSample): DaySunPoint[] {
       reach: obs.indoorM,
       awningEnter: obs.hit.awningEnter,
       intensity: obs.intensity,
-      indoor: obs.indoor,
+      heatKw: obs.heatKw,
     }
   })
 }
 
 export type YearSunPoint = {
   dayOfYear: number
-  doseMh: number
+  heatKwh: number
   hoursInside: number
   maxReach: number
 }
 
-/** Daily m·h at a civil day, linear between year-series samples. */
+/** Daily heat (kWh/m) at a civil day, linear between year-series samples. */
 export function lerpYearDose(series: YearSunPoint[], day: number): number {
   if (!series.length) return 0
-  if (day <= series[0].dayOfYear) return series[0].doseMh
+  if (day <= series[0].dayOfYear) return series[0].heatKwh
   const last = series[series.length - 1]
-  if (day >= last.dayOfYear) return last.doseMh
+  if (day >= last.dayOfYear) return last.heatKwh
   for (let i = 1; i < series.length; i++) {
     const a = series[i - 1]
     const b = series[i]
     if (day <= b.dayOfYear) {
       const t = (day - a.dayOfYear) / (b.dayOfYear - a.dayOfYear)
-      return a.doseMh + (b.doseMh - a.doseMh) * t
+      return a.heatKwh + (b.heatKwh - a.heatKwh) * t
     }
   }
-  return last.doseMh
+  return last.heatKwh
 }
 
 export function yearSeriesPeak(series: YearSunPoint[]): number {
-  return series.reduce((m, p) => Math.max(m, p.doseMh), 0)
+  return series.reduce((m, p) => Math.max(m, p.heatKwh), 0)
 }
 
-/** Sum of interpolated daily m·h from the first sample day through the last. */
+/** Sum of interpolated daily heat, kWh per metre of glass, first sample through last. */
 export function yearSeriesArea(series: YearSunPoint[]): number {
   if (series.length === 0) return 0
-  if (series.length === 1) return series[0].doseMh
+  if (series.length === 1) return series[0].heatKwh
   const first = series[0].dayOfYear
   const last = series[series.length - 1].dayOfYear
   let sum = 0
@@ -730,7 +782,7 @@ export type YearSunSample = {
   timeStep?: number
 }
 
-/** Daily indoor sun across the year. Independent of the date/time sliders. */
+/** Daily heat through the glass across the year. Independent of the date/time sliders. */
 export function computeYearlySun(sample: YearSunSample): YearSunPoint[] {
   const dayStep = Math.max(1, Math.round(sample.dayStep ?? 2))
   const timeStep = Math.max(1, Math.round(sample.timeStep ?? 5))
@@ -766,7 +818,7 @@ export function computeYearlySun(sample: YearSunSample): YearSunPoint[] {
     })
     points.push({
       dayOfYear: date.dayOfYear,
-      doseMh: daily.doseMh,
+      heatKwh: daily.heatKwh,
       hoursInside: daily.hoursInside,
       maxReach: daily.maxReach,
     })
@@ -801,7 +853,7 @@ export function computeYearlySun(sample: YearSunSample): YearSunPoint[] {
     })
     points.push({
       dayOfYear: last,
-      doseMh: daily.doseMh,
+      heatKwh: daily.heatKwh,
       hoursInside: daily.hoursInside,
       maxReach: daily.maxReach,
     })

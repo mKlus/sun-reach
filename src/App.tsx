@@ -67,7 +67,7 @@ export default function App() {
         </div>
         <p className="lede">
           Section through a glass door and sloped awning. Set the site, facing, and roof fall —
-          then read how far winter sun walks indoors.
+          then read how much winter sun can heat the room.
         </p>
         <div className="mast-tools">
           <ThemeSwitch value={themePref} onChange={setThemePref} />
@@ -82,7 +82,7 @@ export default function App() {
             </span>
             <span>
               Daily
-              <em>{model.daily.doseMh.toFixed(2)} m·h</em>
+              <em>{model.daily.heatKwh.toFixed(2)} kWh/m</em>
             </span>
           </div>
         </div>
@@ -198,8 +198,8 @@ export default function App() {
                 dateLabel={formatDate(YEAR, inputs.dayOfYear).label}
                 series={dayCurve}
                 selectedMinutes={inputs.timeMinutes}
-                dayArea={model.daily.doseMh}
-                yMax={inputs.roomDepth}
+                dayArea={model.daily.heatKwh}
+                yMax={0}
                 sunriseMin={model.daylight.sunriseMin}
                 sunsetMin={model.daylight.sunsetMin}
                 onSelectMinutes={setClock}
@@ -255,7 +255,7 @@ export default function App() {
                 yMax={yearAxisMax}
                 reference={eaveYear}
                 compare={hasCompare(inputs) ? compareYear : undefined}
-                todayDose={model.daily.doseMh}
+                todayDose={model.daily.heatKwh}
                 onSelectDay={(dayOfYear) => patch({ dayOfYear: clamp(dayOfYear, 1, dayMax) })}
               />
             </article>
@@ -296,13 +296,13 @@ export default function App() {
         </Popout>
       ) : null}
       {popout === 'day' ? (
-        <Popout title="Indoor reach today" onClose={() => setPopout(null)}>
+        <Popout title="Heat through the glass today" onClose={() => setPopout(null)}>
           <DaySunChart
             dateLabel={formatDate(YEAR, inputs.dayOfYear).label}
             series={dayCurve}
             selectedMinutes={inputs.timeMinutes}
-            dayArea={model.daily.doseMh}
-            yMax={inputs.roomDepth}
+            dayArea={model.daily.heatKwh}
+            yMax={0}
             sunriseMin={model.daylight.sunriseMin}
             sunsetMin={model.daylight.sunsetMin}
             tall
@@ -316,7 +316,7 @@ export default function App() {
         </Popout>
       ) : null}
       {popout === 'year' ? (
-        <Popout title="Daily indoor sun through the year" onClose={() => setPopout(null)}>
+        <Popout title="Daily heat through the glass" onClose={() => setPopout(null)}>
           <AwningKey inputs={inputs} />
           <YearSunChart
             year={YEAR}
@@ -325,7 +325,7 @@ export default function App() {
             yMax={yearAxisMax}
             reference={eaveYear}
             compare={hasCompare(inputs) ? compareYear : undefined}
-            todayDose={model.daily.doseMh}
+            todayDose={model.daily.heatKwh}
             tall
             onSelectDay={(dayOfYear) => patch({ dayOfYear: clamp(dayOfYear, 1, dayMax) })}
           />

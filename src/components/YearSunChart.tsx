@@ -17,7 +17,7 @@ type YearSunChartProps = {
   year: number
   series: YearSunPoint[]
   selectedDay: number
-  /** Fixed top of the Y axis, in m·h. Does not follow the current curve. */
+  /** Fixed top of the Y axis, in kWh/m. Does not follow the current curve. */
   yMax: number
   reference?: YearSunPoint[]
   compare?: YearSunPoint[]
@@ -64,7 +64,7 @@ export function YearSunChart({
   const { pad, ih, xOf, yOf } = frame
 
   const pathOf = (pts: YearSunPoint[]) =>
-    monotoneCubicPath(pts.map((p) => ({ x: xOf(p.dayOfYear), y: yOf(p.doseMh) })))
+    monotoneCubicPath(pts.map((p) => ({ x: xOf(p.dayOfYear), y: yOf(p.heatKwh) })))
   const line = pathOf(series)
   const refLine = reference && reference.length ? pathOf(reference) : ''
   const compareLine = compare && compare.length ? pathOf(compare) : ''
@@ -105,14 +105,14 @@ export function YearSunChart({
     <section className="year-chart">
       {tall ? null : (
         <div className="year-chart-head">
-          <h3>Daily indoor sun through the year</h3>
-          <p>Units m·h. Year total is the sum of interpolated daily values.</p>
+          <h3>Daily heat through the glass</h3>
+          <p>Units kWh per metre of glass width. Morning air mass is included.</p>
         </div>
       )}
       <p className="hint">
-        Solid is this awning only (not stacked on the eave). Dashed is the eave reference —
-        a separate 0° roof, not extra shade. Cyan is the frozen compare. Year total is the
-        sum of interpolated daily m·h. Click or arrow keys jump the date (Shift+arrow = one week).
+        Solid is this awning. Dashed is the eave reference. Cyan is the frozen compare. This
+        is energy through the glass, not metres of floor — a long weak morning stripe scores
+        low. Click or arrow keys jump the date (Shift+arrow = one week).
       </p>
       <table className="curve-stats">
         <thead>
@@ -158,7 +158,7 @@ export function YearSunChart({
         style={{ fontSize: axisFont }}
         role="slider"
         tabIndex={0}
-        aria-label="Daily indoor sun in metre-hours for each day of the year"
+        aria-label="Daily heat through the glass in kilowatt-hours per metre for each day of the year"
         aria-valuemin={1}
         aria-valuemax={dayMax}
         aria-valuenow={selectedDay}

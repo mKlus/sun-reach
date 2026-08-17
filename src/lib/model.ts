@@ -22,6 +22,7 @@ import {
   getDaylight,
   getSunPosition,
   getTimezone,
+  heatKwPerM,
   profileAngle,
   siteCivilNow,
   sunReach,
@@ -95,6 +96,8 @@ export type CalcModel = {
   sunSet: SunPosition | null
   prof: ProfileAngle
   reach: SunReach
+  /** Incoming heat now, kW per metre of glass width. */
+  heatKw: number
   daylight: Daylight
   daily: DailySun
 }
@@ -357,6 +360,7 @@ export function computeInstant(inputs: Inputs, year = YEAR): InstantModel {
     sunSet,
     prof,
     reach,
+    heatKw: heatKwPerM(sun.alt, prof.azDiff, reach.openingM),
     daylight,
   }
 }

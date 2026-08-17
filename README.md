@@ -59,15 +59,15 @@ h_end = h_wall − projection × tan(slope)
 
 **Sun enter length** is how far the beam walks across the indoor floor, only while the sun is in front of the glass. If that hit would be past the back wall, the leftover is counted as the **height of the sun patch on the end wall** (not more imaginary floor — a grazing sunrise would otherwise explode to hundreds of metres). If the sun is around the side or back of the house (more than 90° off the door’s facing), the app reports no sun through the door — for example a south-east summer sunrise on a north-north-east door. When the sun *is* on the facade, rays are treated as parallel at the *profile angle* (altitude corrected for how far the sun sits off the door). If the ray that just misses the outer edge hits the wall above the door head, the opening itself limits how far the sun reaches.
 
-**Daily indoor sun** (metre-hours, m·h) adds up from sunrise to sunset:
+**Heat through the glass** (kW per metre of width now; kWh/m over the day) is the energy that actually comes in:
 
 ```
-reach (m) × face-on intensity × hours
+0.9 kW/m² × glass SHGC × air-mass beam × cos(alt) × cos(off-facade) × unshaded opening height
 ```
 
-Intensity is `cos(altitude) × cos(off-facade)`, i.e. 1 when the beam is square to the glass and 0 when it only grazes or is beside the house. One metre of full-face sun for one hour is **1 m·h**. The section drawing shows only the current minute.
+Morning air mass knocks the beam down. A long weak stripe across the floor is not extra heat. The awning only cuts heat when it clips or covers the opening. Multiply kWh/m by your glass width for a room total. The section drawing still shows **reach** (where the stripe sits).
 
-A **day chart** sits beside the house section and shows geometric indoor reach from sunrise to sunset. Fill is stronger when the beam is more face-on. The **today m·h** figure is the area under that intensity-weighted curve. Click or use arrow keys to set the clock. A full-width **year chart** plots the daily total; the dashed line is a configurable **eave reference** (default 0.60 m projection, 2.30 m wall height, always 0°), the solid line is the current awning, and cyan is a frozen compare. A key above the chart lists projection, wall height, and slope for this / eave / compare. The table lists this day, the peak day, and the **year total** (area under each curve). Click or use arrow keys to jump the date. The year Y axis is the larger of those series’ peaks. **Larger** on the house section opens a tall drawing.
+A **day chart** plots heat (kW/m) from sunrise to sunset; the dashed line is indoor reach on its own scale. Click or use arrow keys to set the clock. A full-width **year chart** plots daily heat (kWh/m); the dashed line is a configurable **eave reference** (default 0.60 m projection, 2.30 m wall height, always 0°), the solid line is the current awning, and cyan is a frozen compare. A key above the chart lists projection, wall height, and slope for this / eave / compare. The table lists this day, the peak day, and the **year total**. Click or use arrow keys to jump the date. **Larger** on the house section opens a tall drawing.
 
 Rafter length (along the roof) is shown as a readout:
 

@@ -10,7 +10,7 @@ type DaySunChartProps = {
   yMax: number
   sunriseMin: number
   sunsetMin: number
-  /** Area under today's intensity-weighted indoor curve, in m·h. */
+  /** Today's heat through the glass, kWh per metre of width. */
   dayArea?: number
   tall?: boolean
   onSelectMinutes?: (minutes: number) => void
@@ -32,28 +32,30 @@ export function DaySunChart({
   const W = 640
   const H = tall ? 340 : 200
   const axisFont = useSvgScreenFont(svgRef, W, 12)
-  const peak = useMemo(() => series.reduce((m, p) => Math.max(m, p.reach), 0), [series])
-  const awningPeak = useMemo(() => series.reduce((m, p) => Math.max(m, p.awningEnter), 0), [series])
-  const axisTop = niceChartMax(Math.max(yMax, peak, awningPeak))
+  const heatPeak = useMemo(() => series.reduce((m, p) => Math.max(m, p.heatKw), 0), [series])
+  const reachPeak = useMemo(() => series.reduce((m, p) => Math.max(m, p.reach), 0), [series])
+  const axisTop = niceChartMax(Math.max(yMax, heatPeak))
+  const reachTop = Math.max(reachPeak, 0.01)
   const x0 = sunriseMin
   const x1 = Math.max(sunriseMin + 1, sunsetMin)
   const frame = makeChartFrame(W, H, axisFont, x0, x1, axisTop)
   const { pad, ih, xOf, yOf } = frame
+  const yOfReach = (m: number) => pad.t + ih - (m / reachTop) * ih
 
-  const line = series
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xOf(p.minutes).toFixed(1)} ${yOf(p.reach).toFixed(1)}`)
+  const heatLine = series
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xOf(p.minutes).toFixed(1)} ${yOf(p.heatKw).toFixed(1)}`)
     .join(' ')
-  const awningLine = series
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xOf(p.minutes).toFixed(1)} ${yOf(p.awningEnter).toFixed(1)}`)
+  const reachLine = series
+    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xOf(p.minutes).toFixed(1)} ${yOfReach(p.reach).toFixed(1)}`)
     .join(' ')
 
   const hours: number[] = []
   for (let h = Math.ceil(x0 / 60); h <= Math.floor(x1 / 60); h++) hours.push(h * 60)
 
   const focusMin = hoverMin ?? selectedMinutes
+  const focusHeat = lerpKeyed(series, focusMin, (p) => p.minutes, (p) => p.heatKw)
   const focusReach = lerpKeyed(series, focusMin, (p) => p.minutes, (p) => p.reach)
   const focusAwning = lerpKeyed(series, focusMin, (p) => p.minutes, (p) => p.awningEnter)
-  const focusFace = lerpKeyed(series, focusMin, (p) => p.minutes, (p) => p.intensity)
 
   function minFromClientX(svg: SVGSVGElement, clientX: number) {
     return Math.round(pointerToDomain(svg, clientX, frame, x0, x1))
@@ -62,26 +64,24 @@ export function DaySunChart({
   return (
     <section className="year-chart">
       <div className="year-chart-head">
-        <h3>Indoor reach on {dateLabel}</h3>
+        <h3>Heat through the glass on {dateLabel}</h3>
         <p>
           {dayArea != null ? (
             <>
-              Today <strong>{dayArea.toFixed(2)} m·h</strong>
+              Today <strong>{dayArea.toFixed(2)} kWh/m</strong>
               {' · '}
             </>
           ) : null}
-          {formatTime(focusMin).label}: <strong>{focusReach.toFixed(2)} m inside</strong>
-          {` · ${focusAwning.toFixed(2)} m under awning`}
-          {peak > 0
-            ? ` · face-on ${(focusFace * 100).toFixed(0)}% · peak ${peak.toFixed(2)} m`
-            : ' · no sun through the door'}
+          {formatTime(focusMin).label}: <strong>{focusHeat.toFixed(2)} kW/m</strong>
+          {` · ${focusReach.toFixed(2)} m across floor`}
+          {focusAwning > 0 ? ` · ${focusAwning.toFixed(2)} m under awning` : ''}
+          {heatPeak <= 0 ? ' · no sun through the door' : ''}
         </p>
       </div>
       <p className="hint">
-        Solid is indoor reach (m). Dashed amber is how far sun walks in under the awning from
-        the outer edge. Fill is stronger when the beam is more face-on. Click or use arrow keys
-        to set the clock (Shift+arrow = one hour). Indoor metres include sun on the back
-        wall. Y is reach, not daily m·h.
+        Solid is incoming heat (kW per metre of glass). Dashed is indoor reach (own scale).
+        Morning air mass knocks the heat down even when the stripe is long. Click or use
+        arrow keys to set the clock (Shift+arrow = one hour).
       </p>
       <svg
         ref={svgRef}
@@ -89,7 +89,7 @@ export function DaySunChart({
         style={{ fontSize: axisFont }}
         role="slider"
         tabIndex={0}
-        aria-label={`Indoor reach through the day on ${dateLabel}`}
+        aria-label={`Heat through the glass through the day on ${dateLabel}`}
         aria-valuemin={sunriseMin}
         aria-valuemax={sunsetMin}
         aria-valuenow={selectedMinutes}
@@ -118,13 +118,13 @@ export function DaySunChart({
         <ChartYGrid frame={frame} yMax={axisTop} />
         {series.slice(1).map((b, i) => {
           const a = series[i]
-          const alpha = (a.intensity + b.intensity) / 2
-          if (alpha <= 0 && a.reach <= 0 && b.reach <= 0) return null
-          const d = `M ${xOf(a.minutes).toFixed(1)} ${yOf(a.reach).toFixed(1)} L ${xOf(b.minutes).toFixed(1)} ${yOf(b.reach).toFixed(1)} L ${xOf(b.minutes).toFixed(1)} ${yOf(0).toFixed(1)} L ${xOf(a.minutes).toFixed(1)} ${yOf(0).toFixed(1)} Z`
-          return <path key={a.minutes} d={d} className="year-fill" opacity={0.15 + alpha * 0.7} />
+          if (a.heatKw <= 0 && b.heatKw <= 0) return null
+          const alpha = (a.heatKw + b.heatKw) / 2 / Math.max(axisTop, 0.01)
+          const d = `M ${xOf(a.minutes).toFixed(1)} ${yOf(a.heatKw).toFixed(1)} L ${xOf(b.minutes).toFixed(1)} ${yOf(b.heatKw).toFixed(1)} L ${xOf(b.minutes).toFixed(1)} ${yOf(0).toFixed(1)} L ${xOf(a.minutes).toFixed(1)} ${yOf(0).toFixed(1)} Z`
+          return <path key={a.minutes} d={d} className="year-fill" opacity={0.15 + Math.min(1, alpha) * 0.7} />
         })}
-        {line ? <path d={line} className="year-line" /> : null}
-        {awningLine ? <path d={awningLine} className="day-awning" /> : null}
+        {heatLine ? <path d={heatLine} className="year-line" /> : null}
+        {reachLine ? <path d={reachLine} className="day-awning" /> : null}
         <line
           x1={xOf(selectedMinutes)}
           x2={xOf(selectedMinutes)}
@@ -134,21 +134,21 @@ export function DaySunChart({
         />
         <circle
           cx={xOf(selectedMinutes)}
-          cy={yOf(lerpKeyed(series, selectedMinutes, (p) => p.minutes, (p) => p.reach))}
+          cy={yOf(lerpKeyed(series, selectedMinutes, (p) => p.minutes, (p) => p.heatKw))}
           r={4}
           className="year-today-dot"
         />
         <circle
           cx={xOf(selectedMinutes)}
-          cy={yOf(lerpKeyed(series, selectedMinutes, (p) => p.minutes, (p) => p.awningEnter))}
+          cy={yOfReach(lerpKeyed(series, selectedMinutes, (p) => p.minutes, (p) => p.reach))}
           r={3}
           className="day-awning-dot"
         />
         {hoverMin != null ? (
           <>
             <line x1={xOf(hoverMin)} x2={xOf(hoverMin)} y1={pad.t} y2={pad.t + ih} className="year-hover" />
-            <circle cx={xOf(hoverMin)} cy={yOf(focusReach)} r={3.5} className="year-hover-dot" />
-            <circle cx={xOf(hoverMin)} cy={yOf(focusAwning)} r={3} className="day-awning-dot" />
+            <circle cx={xOf(hoverMin)} cy={yOf(focusHeat)} r={3.5} className="year-hover-dot" />
+            <circle cx={xOf(hoverMin)} cy={yOfReach(focusReach)} r={3} className="day-awning-dot" />
           </>
         ) : null}
         {hours.map((m) => (

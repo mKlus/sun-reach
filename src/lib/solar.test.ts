@@ -15,7 +15,9 @@ import {
   siteCivilNow,
   getSunPosition,
   getTimezone,
+  heatKwPerM,
   lerpYearDose,
+  relativeBeam,
   profileAngle,
   rafterLength,
   sunReach,
@@ -388,6 +390,13 @@ describe('solar math', () => {
     expect(facadeIntensity(-5, 0)).toBe(0)
   })
 
+  it('makes morning beam much weaker than a high sun', () => {
+    expect(relativeBeam(8)).toBeLessThan(0.55)
+    expect(relativeBeam(35)).toBeGreaterThan(relativeBeam(8) * 1.3)
+    expect(heatKwPerM(8, 0, 2)).toBeLessThan(heatKwPerM(35, 0, 2) * 0.7)
+    expect(heatKwPerM(8, 0, 2)).toBeLessThan(1.2)
+  })
+
   it('gives winter daily indoor sun to a north door, none to a south door, at Bega', () => {
     const lat = -36.68
     const lon = 149.84
@@ -411,9 +420,9 @@ describe('solar math', () => {
     }
     const north = computeDailySun({ ...dims, facing: 0 })
     const south = computeDailySun({ ...dims, facing: 180 })
-    expect(north.doseMh).toBeGreaterThan(0.5)
+    expect(north.heatKwh).toBeGreaterThan(0.5)
     expect(north.maxReach).toBeGreaterThan(0)
-    expect(south.doseMh).toBeLessThan(0.05)
+    expect(south.heatKwh).toBeLessThan(0.05)
     expect(north.hoursInside).toBeGreaterThan(south.hoursInside)
   })
 
@@ -439,9 +448,9 @@ describe('solar math', () => {
       sunsetMin: day.sunsetMin,
       stepMin: 5,
     })
-    expect(daily.doseMh).toBeGreaterThan(0.5)
+    expect(daily.heatKwh).toBeGreaterThan(0.5)
     expect(daily.maxReach).toBeLessThan(25)
-    expect(daily.doseMh).toBeLessThan(80)
+    expect(daily.heatKwh).toBeLessThan(80)
   })
 
   it('splits daylight into leftover-aware intervals and does not count sunset twice', () => {
@@ -479,11 +488,21 @@ describe('solar math', () => {
     const curve = computeDayCurve(sample)
     const daily = computeDailySun(sample)
     const slots = daylightIntervals(sample.sunriseMin, sample.sunsetMin, 10)
-    const area = curve.reduce((s, p, i) => s + p.indoor * ((slots[i]?.dtMin ?? 0) / 60), 0)
+    const area = curve.reduce((s, p, i) => s + p.heatKw * ((slots[i]?.dtMin ?? 0) / 60), 0)
     expect(curve.length).toBeGreaterThan(10)
     expect(curve.length).toBe(slots.length)
-    expect(area).toBeCloseTo(daily.doseMh, 5)
-    expect(Math.max(...curve.map((p) => p.indoor))).toBeGreaterThan(0)
+    expect(area).toBeCloseTo(daily.heatKwh, 5)
+    expect(Math.max(...curve.map((p) => p.heatKw))).toBeGreaterThan(0)
+    const lit = curve.filter((p) => p.heatKw > 0)
+    expect(lit.length).toBeGreaterThan(4)
+    const morning = lit.slice(0, Math.max(1, Math.floor(lit.length * 0.2)))
+    const high = lit.slice(Math.floor(lit.length * 0.4), Math.ceil(lit.length * 0.6))
+    const morningHeat = Math.max(...morning.map((p) => p.heatKw))
+    const highHeat = Math.max(...high.map((p) => p.heatKw))
+    const morningReach = Math.max(...morning.map((p) => p.reach))
+    const highReach = Math.max(...high.map((p) => p.reach))
+    expect(morningHeat).toBeLessThan(highHeat * 0.7)
+    expect(morningReach).toBeGreaterThan(highReach * 0.8)
   })
 
   it('builds a year series that ignores clock time and stays non-negative', () => {
@@ -502,8 +521,8 @@ describe('solar math', () => {
     })
     expect(series.length).toBeGreaterThan(20)
     expect(series[0].dayOfYear).toBe(1)
-    expect(series.every((p) => p.doseMh >= 0)).toBe(true)
-    expect(Math.max(...series.map((p) => p.doseMh))).toBeGreaterThan(0.2)
+    expect(series.every((p) => p.heatKwh >= 0)).toBe(true)
+    expect(Math.max(...series.map((p) => p.heatKwh))).toBeGreaterThan(0.2)
   })
 
   it('keeps a year of daily indoor sun free of grazing spikes', () => {
@@ -520,13 +539,13 @@ describe('solar math', () => {
       dayStep: 1,
       timeStep: 5,
     })
-    const live = series.filter((p) => p.doseMh > 1)
+    const live = series.filter((p) => p.heatKwh > 1)
     expect(live.length).toBeGreaterThan(20)
-    expect(Math.max(...series.map((p) => p.doseMh))).toBeLessThan(80)
+    expect(Math.max(...series.map((p) => p.heatKwh))).toBeLessThan(80)
     let worst = 0
     for (let i = 1; i < series.length; i++) {
-      const a = series[i - 1].doseMh
-      const b = series[i].doseMh
+      const a = series[i - 1].heatKwh
+      const b = series[i].heatKwh
       if (a < 2 && b < 2) continue
       const rel = Math.abs(b - a) / Math.max(a, b, 1)
       if (rel > worst) worst = rel
@@ -549,8 +568,8 @@ describe('solar math', () => {
     }
     const short = computeYearlySun({ ...base, length: 2 })
     const long = computeYearlySun({ ...base, length: 10 })
-    const shortPeak = Math.max(...short.map((p) => p.doseMh))
-    const longPeak = Math.max(...long.map((p) => p.doseMh))
+    const shortPeak = Math.max(...short.map((p) => p.heatKwh))
+    const longPeak = Math.max(...long.map((p) => p.heatKwh))
     const shortYear = yearSeriesArea(short)
     const longYear = yearSeriesArea(long)
     expect(shortPeak).toBeGreaterThan(2)
@@ -560,9 +579,9 @@ describe('solar math', () => {
 
   it('interpolates a year series and integrates its area', () => {
     const series = [
-      { dayOfYear: 1, doseMh: 2, hoursInside: 1, maxReach: 1 },
-      { dayOfYear: 5, doseMh: 4, hoursInside: 1, maxReach: 1 },
-      { dayOfYear: 9, doseMh: 0, hoursInside: 0, maxReach: 0 },
+      { dayOfYear: 1, heatKwh: 2, hoursInside: 1, maxReach: 1 },
+      { dayOfYear: 5, heatKwh: 4, hoursInside: 1, maxReach: 1 },
+      { dayOfYear: 9, heatKwh: 0, hoursInside: 0, maxReach: 0 },
     ]
     expect(lerpYearDose(series, 1)).toBe(2)
     expect(lerpYearDose(series, 3)).toBe(3)
@@ -602,6 +621,7 @@ describe('solar math', () => {
         hitsBack: false,
         backWallHeight: 0,
         awningEnter: 0,
+        openingM: 0,
         status: 'off-facade',
         message: 'around',
       }),
