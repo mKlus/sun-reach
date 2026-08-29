@@ -41,7 +41,7 @@ This is a client-side geometry tool, not a content site. Vite + React 19 + TypeS
 | Day / time | Civil clock time **at that site**, limited to sunrise–sunset. **Today** uses the site timezone, not the laptop clock. |
 | Awning projection | Horizontal distance from the wall to the outer edge |
 | Awning height at wall | Underside height where the roof meets the house |
-| Awning roof slope | Fall **away from the wall**, in degrees (`0` is flat) |
+| Awning roof slope | Signed pitch, **−25°…+25°**. Positive falls away from the wall; negative rises (butterfly). `0` is flat. |
 | Door / glass height | Head height of the opening, measured from the floor |
 | House width | Front wall to back wall (drawing). Sun that reaches the end wall still counts as indoor heat. |
 | Eave projection / height | House eave (always flat). Defaults: 0.60 m, 2.30 m. |
@@ -56,6 +56,8 @@ Theme is **Auto / Dark / Light** (Auto follows the system colour scheme). **Rese
 ```
 h_end = h_wall − projection × tan(slope)
 ```
+
+Negative slope makes `h_end` higher than the wall (butterfly).
 
 **Sun enter length** is how far the beam walks across the indoor floor, only while the sun is in front of the glass. If that hit would be past the back wall, the leftover is counted as the **height of the sun patch on the end wall** (not more imaginary floor — a grazing sunrise would otherwise explode to hundreds of metres). If the sun is around the side or back of the house (more than 90° off the door’s facing), the app reports no sun through the door — for example a south-east summer sunrise on a north-north-east door. When the sun *is* on the facade, rays are treated as parallel at the *profile angle* (altitude corrected for how far the sun sits off the door). If the ray that just misses the outer edge hits the wall above the door head, the opening itself limits how far the sun reaches.
 

@@ -156,7 +156,7 @@ describe('defaults and persistence', () => {
       lon: -200,
       facing: 400,
       projection: 99,
-      slope: -4,
+      slope: -40,
       doorHeight: 0.2,
       roomDepth: 40,
       dayOfYear: 900,
@@ -165,10 +165,12 @@ describe('defaults and persistence', () => {
     expect(next.lon).toBe(-180)
     expect(next.facing).toBe(40)
     expect(next.projection).toBe(12)
-    expect(next.slope).toBe(0)
+    expect(next.slope).toBe(-25)
     expect(next.doorHeight).toBe(1)
     expect(next.roomDepth).toBe(20)
     expect(next.dayOfYear).toBe(daysInYear(YEAR))
+    expect(clampInputs({ ...DEFAULT_INPUTS, slope: -12 }).slope).toBe(-12)
+    expect(clampInputs({ ...DEFAULT_INPUTS, slope: 40 }).slope).toBe(25)
   })
 
   it('clamps compare dims and leaves a missing compare as null', () => {

@@ -1,10 +1,10 @@
 import type { Inputs } from '../lib/model'
 import { hasCompare } from '../lib/scene'
-import { awningEndHeight } from '../lib/solar'
+import { awningEndHeight, slopeHeadline } from '../lib/solar'
 
 function spec(projection: number, heightWall: number, slope: number): string {
   const end = awningEndHeight(heightWall, projection, slope)
-  return `${projection.toFixed(1)} m proj · ${heightWall.toFixed(2)} m wall · ${end.toFixed(2)} m end · ${slope.toFixed(1)}°`
+  return `${projection.toFixed(1)} m proj · ${heightWall.toFixed(2)} m wall · ${end.toFixed(2)} m end · ${slopeHeadline(slope)}`
 }
 
 export function AwningKey({ inputs }: { inputs: Inputs }) {

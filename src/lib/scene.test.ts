@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_INPUTS } from './model'
+import { DEFAULT_INPUTS, SLOPE_MAX } from './model'
 import { mergeScene, parseSceneSearch, writeSceneSearch } from './scene'
 
 describe('shareable scene URL', () => {
@@ -29,9 +29,15 @@ describe('shareable scene URL', () => {
     const merged = mergeScene(DEFAULT_INPUTS, parsed!)
     expect(merged.compareProjection).toBe(12)
     expect(merged.compareHeightWall).toBeGreaterThanOrEqual(1.8)
-    expect(merged.compareSlope).toBe(35)
+    expect(merged.compareSlope).toBe(SLOPE_MAX)
     expect(merged.houseRoofSlope).toBe(35)
     expect(merged.facing).toBe(40)
+  })
+
+  it('round-trips a butterfly (negative) awning slope', () => {
+    const src = { ...DEFAULT_INPUTS, slope: -12.5 }
+    const merged = mergeScene(DEFAULT_INPUTS, parseSceneSearch(writeSceneSearch(src))!)
+    expect(merged.slope).toBeCloseTo(-12.5, 5)
   })
 
   it('returns null for an empty query', () => {

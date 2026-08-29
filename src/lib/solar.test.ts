@@ -20,6 +20,7 @@ import {
   relativeBeam,
   profileAngle,
   rafterLength,
+  slopeHeadline,
   sunReach,
   yearSeriesArea,
   yearSeriesPeak,
@@ -153,6 +154,34 @@ describe('solar math', () => {
     expect(h).toBeLessThan(2.7)
     expect(h).toBeGreaterThan(2.1)
     expect(rafterLength(3, 10)).toBeCloseTo(3 / Math.cos(toRad(10)), 12)
+  })
+
+  it('lifts the outer edge on a butterfly (negative) slope', () => {
+    const h = awningEndHeight(2.7, 3, -10)
+    expect(h).toBeCloseTo(2.7 - 3 * Math.tan(toRad(-10)), 12)
+    expect(h).toBeGreaterThan(2.7)
+    expect(rafterLength(3, -10)).toBeCloseTo(rafterLength(3, 10), 12)
+    expect(slopeHeadline(-12.5)).toBe('-12.5° rise')
+    expect(slopeHeadline(5)).toBe('5.0° fall')
+    expect(slopeHeadline(0)).toBe('0.0° flat')
+    const fall = sunReach({
+      length: 3,
+      heightWall: 2.7,
+      slopeDeg: 10,
+      doorHeight: 2.2,
+      profile: 25,
+      behind: false,
+    })
+    const rise = sunReach({
+      length: 3,
+      heightWall: 2.7,
+      slopeDeg: -10,
+      doorHeight: 2.2,
+      profile: 25,
+      behind: false,
+    })
+    expect(rise.heightEnd).toBeGreaterThan(fall.heightEnd)
+    expect(rise.reach).toBeGreaterThan(fall.reach)
   })
 
   it('flags a steep slope that hits the ground', () => {

@@ -1,5 +1,5 @@
 import type { CalcModel } from './model'
-import { toRad } from './solar'
+import { slopeHeadline, toRad } from './solar'
 import type { ThemeResolved } from './theme'
 import { SECTION_PALETTE, type SectionPalette } from './tokens'
 
@@ -103,7 +103,7 @@ export function layoutSection(model: CalcModel, viewW: number, viewH: number): S
   const attachY = groundY - H
   const tipX = wallX - L
   const tipY = groundY - Hend
-  const slopeR = toRad(Math.max(0, slopeDeg))
+  const slopeR = toRad(slopeDeg)
   const slabRise = Math.max(6, SLAB_M * scale) / Math.max(0.45, Math.cos(slopeR))
   const topAttachY = attachY - slabRise
   const topTipY = tipY - slabRise
@@ -510,10 +510,10 @@ export function drawSection(
   ctx.setLineDash([])
   ctx.fillText(`${length.toFixed(1)} m`, (L.tipX + L.attachX) / 2 - 14, L.groundY + 22)
 
-  if (slopeDeg > 0 && reach.heightEnd > 0) {
+  if (Math.abs(slopeDeg) >= 0.05 && reach.heightEnd > 0) {
     ctx.fillText(
-      `${slopeDeg.toFixed(1)}° fall`,
-      (L.tipX + L.attachX) / 2 - 18,
+      slopeHeadline(slopeDeg),
+      (L.tipX + L.attachX) / 2 - 22,
       (L.topTipY + L.topAttachY) / 2 - 8,
     )
   }

@@ -406,11 +406,17 @@ export function offFacadeMessage(az: number, facing: number, azRel: number): str
 }
 
 /**
- * Positive slopeDeg = roof falls away from the wall (typical drainage).
- * length is the horizontal projection from the wall, in metres.
+ * Signed slope: positive falls away from the wall (drainage),
+ * negative rises (butterfly). length is the horizontal projection, metres.
  */
 export function awningDrop(length: number, slopeDeg: number): number {
   return length * Math.tan(toRad(slopeDeg))
+}
+
+export function slopeHeadline(slopeDeg: number): string {
+  if (Math.abs(slopeDeg) < 0.05) return '0.0° flat'
+  if (slopeDeg > 0) return `${slopeDeg.toFixed(1)}° fall`
+  return `${slopeDeg.toFixed(1)}° rise`
 }
 
 export function awningEndHeight(heightWall: number, length: number, slopeDeg: number): number {

@@ -53,6 +53,14 @@ describe('section layout', () => {
     expect(L.eaveTopY - L.ridgeY).toBeCloseTo(rise * L.scale, 5)
   })
 
+  it('raises the outer fascia on a butterfly awning', () => {
+    const model = computeModel({ ...DEFAULT_INPUTS, slope: -12 }, YEAR)
+    const L = layoutSection(model, view.w, view.h)
+    expect(model.reach.heightEnd).toBeGreaterThan(model.heightWall)
+    expect(L.tipY).toBeLessThan(L.attachY)
+    expect(L.topTipY).toBeLessThan(L.topAttachY)
+  })
+
   it('sits the awning post just inside the outer fascia', () => {
     const model = computeModel(DEFAULT_INPUTS, YEAR)
     const L = layoutSection(model, view.w, view.h)

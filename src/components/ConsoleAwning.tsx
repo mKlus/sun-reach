@@ -15,6 +15,7 @@ import {
   WALL_HEIGHT_MAX,
   WALL_HEIGHT_MIN,
 } from '../lib/model'
+import { slopeHeadline } from '../lib/solar'
 import { SliderField } from './SliderField'
 
 type ConsoleAwningProps = {
@@ -97,8 +98,8 @@ export function ConsoleAwning({
         min={SLOPE_MIN}
         max={SLOPE_MAX}
         step={0.5}
-        display={`${inputs.slope.toFixed(1)}°`}
-        hint="Fall away from the wall, in degrees. 0° is flat. Changing slope drops or lifts the outer end."
+        display={slopeHeadline(inputs.slope)}
+        hint="Positive falls away from the wall (drainage). Negative rises (butterfly). 0° is flat. Changing slope drops or lifts the outer end."
         showHint={showHints}
         onChange={onSlope}
       />

@@ -66,7 +66,7 @@ export default function App() {
           </div>
         </div>
         <p className="lede">
-          Section through a glass door and sloped awning. Set the site, facing, and roof fall —
+          Section through a glass door and sloped awning. Set the site, facing, and roof slope —
           then read how much winter sun can heat the room.
         </p>
         <div className="mast-tools">
