@@ -1,10 +1,10 @@
-import type { GardenConfig, TreeConfig } from '../lib/gardenModel'
+import type { GardenConfig, TreeConfig, TreeItem } from '../lib/gardenModel'
 import type { GardenDailySun, GardenInstantSun } from '../lib/gardenSolar'
 import { degLabel, formatFacing, metres } from '../lib/solar'
 
 type GardenResultsPanelProps = {
-  tree: TreeConfig
-  garden: GardenConfig
+  tree: TreeConfig | TreeItem[]
+  garden?: GardenConfig | null
   instant: GardenInstantSun
   daily: GardenDailySun
 }
@@ -24,40 +24,51 @@ export function GardenResultsPanel({
 
   const suit = daily.suitability
 
+  const treesCount = Array.isArray(tree) ? tree.length : (tree.mode === 'single' ? 1 : tree.treeCount)
+  const avgHeight = Array.isArray(tree)
+    ? (tree.length ? tree.reduce((s, t) => s + t.height, 0) / tree.length : 0)
+    : tree.height
+
   return (
     <>
       <div className="results results-pair is-triple">
         {/* Metric 1: Garden Sun Now */}
         <div className={`metric ${tone}`}>
           <div className="kicker">Garden sunlit now</div>
-          <div className="big">{sunlitPercent.toFixed(0)}%</div>
+          <div className="big">{garden ? `${sunlitPercent.toFixed(0)}%` : 'No garden'}</div>
           <div className="sub">
-            {sunlitAreaM2.toFixed(1)} m² in direct sun out of {totalAreaM2.toFixed(1)} m²
+            {garden
+              ? `${sunlitAreaM2.toFixed(1)} m² in direct sun out of ${totalAreaM2.toFixed(1)} m²`
+              : 'Add a vegie garden enclosure on the map'}
           </div>
-          <div
-            className="reach"
-            role="meter"
-            aria-label="Current sunlit percentage of garden"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={sunlitPercent}
-          >
-            <span
-              className="reach-fill"
-              style={{
-                width: `${sunlitPercent}%`,
-                background:
-                  status === 'full-sun'
-                    ? 'var(--sun)'
-                    : status === 'partial-sun'
-                      ? 'var(--amber)'
-                      : 'var(--shade)',
-              }}
-            />
-          </div>
-          <div className="reach-cap">
-            0% <span>bed {garden.width.toFixed(1)}m × {garden.length.toFixed(1)}m</span>
-          </div>
+          {garden ? (
+            <>
+              <div
+                className="reach"
+                role="meter"
+                aria-label="Current sunlit percentage of garden"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={sunlitPercent}
+              >
+                <span
+                  className="reach-fill"
+                  style={{
+                    width: `${sunlitPercent}%`,
+                    background:
+                      status === 'full-sun'
+                        ? 'var(--sun)'
+                        : status === 'partial-sun'
+                          ? 'var(--amber)'
+                          : 'var(--shade)',
+                  }}
+                />
+              </div>
+              <div className="reach-cap">
+                0% <span>bed {garden.width.toFixed(1)}m × {garden.length.toFixed(1)}m</span>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {/* Metric 2: Daily Direct Sun Hours */}
@@ -142,11 +153,22 @@ export function GardenResultsPanel({
           Sun azimuth <strong>{degLabel(instant.sunAz)}</strong>
         </div>
         <div>
-          Tree height <strong>{metres(tree.height)}</strong>
+          {Array.isArray(tree) ? 'Tree count' : 'Tree height'}{' '}
+          <strong>{Array.isArray(tree) ? `${treesCount} trees` : metres(avgHeight)}</strong>
         </div>
         <div>
-          {tree.mode === 'single' ? 'Canopy diameter' : 'Tree count'}{' '}
-          <strong>{tree.mode === 'single' ? metres(tree.diameter) : `${tree.treeCount} trees (${metres(tree.groupWidth)} span)`}</strong>
+          {Array.isArray(tree)
+            ? 'Average tree height'
+            : tree.mode === 'single'
+              ? 'Canopy diameter'
+              : 'Tree count'}{' '}
+          <strong>
+            {Array.isArray(tree)
+              ? metres(avgHeight)
+              : tree.mode === 'single'
+                ? metres(tree.diameter)
+                : `${tree.treeCount} trees (${metres(tree.groupWidth)} span)`}
+          </strong>
         </div>
       </div>
     </>

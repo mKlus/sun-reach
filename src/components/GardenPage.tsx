@@ -37,11 +37,25 @@ export function GardenPage({
     timeMinutes: sharedTimeMinutes,
   })
 
-  const { inputs, patch, patchTree, patchGarden, ready, recenter } = session
+  const {
+    inputs,
+    patch,
+    patchGarden,
+    ready,
+    recenter,
+    addTree,
+    updateTree,
+    deleteTree,
+    moveTree,
+    addGarden,
+    deleteGarden,
+  } = session
   const model = useGardenSunSeries(inputs)
   const { instant, daily, dayCurve, yearSeries, yearAxisMax, dayMax, sun, sunRise, sunSet } = model
 
   const [showHints, setShowHints] = useState(false)
+  const [selectedTreeId, setSelectedTreeId] = useState<string | null>(null)
+  const [isGardenSelected, setIsGardenSelected] = useState(false)
   const [popout, setPopout] = useState<null | 'map' | 'day' | 'year' | 'section'>(null)
 
   function setClock(timeMinutes: number) {
@@ -64,17 +78,17 @@ export function GardenPage({
             </button>
           </div>
 
-          {/* Section 01: Location */}
+          {/* Section 01: Location & Map */}
           <section className="block">
             <h2>
-              <span className="idx">01</span> Location
+              <span className="idx">01</span> Location &amp; Yard Map
             </h2>
             <GardenLocationPane
               ready={ready}
               placeLabel={inputs.placeLabel}
               lat={inputs.lat}
               lon={inputs.lon}
-              tree={inputs.tree}
+              trees={inputs.trees}
               garden={inputs.garden}
               instant={instant}
               sunAlt={sun.alt}
@@ -82,13 +96,37 @@ export function GardenPage({
               recenter={recenter}
               locateLabel={session.locateLabel}
               active={popout !== 'map'}
+              selectedTreeId={selectedTreeId}
+              isGardenSelected={isGardenSelected}
+              onSelectTree={(id) => {
+                setSelectedTreeId(id)
+                if (id) setIsGardenSelected(false)
+              }}
+              onSelectGarden={(selected) => {
+                setIsGardenSelected(selected)
+                if (selected) setSelectedTreeId(null)
+              }}
+              onAddTree={(treeLat, treeLon) => {
+                const newId = addTree(treeLat, treeLon)
+                setSelectedTreeId(newId)
+                setIsGardenSelected(false)
+              }}
+              onDeleteTree={deleteTree}
+              onMoveTree={moveTree}
+              onUpdateTree={updateTree}
+              onAddGarden={(gLat, gLon) => {
+                addGarden(gLat, gLon)
+                setIsGardenSelected(true)
+                setSelectedTreeId(null)
+              }}
+              onDeleteGarden={deleteGarden}
+              onGardenOffset={(offsetEast, offsetNorth) => patchGarden({ offsetEast, offsetNorth })}
+              onGardenPatch={(partial) => patchGarden(partial)}
               onUserEdit={session.markPlaceTouched}
               onPick={(lat, lon, label) => {
                 session.markPlaceTouched()
                 session.setLocation(lat, lon, true, label)
               }}
-              onTreeLocation={(lat, lon) => session.setTreePosition(lat, lon)}
-              onGardenOffset={(offsetEast, offsetNorth) => patchGarden({ offsetEast, offsetNorth })}
               onLocate={() => session.locateDevice()}
               onExpand={() => setPopout('map')}
             />
@@ -100,12 +138,12 @@ export function GardenPage({
             </div>
             {showHints ? (
               <p className="hint">
-                Search or click on the map to place your property. Drag the 🌳 tree pin and 🥕 garden pin directly on the satellite map to position them on your yard.
+                Position your property on the map. Click ➕ Add Tree or ➕ Add Vegie Garden to add elements. Drag them to position. Click any tree to reveal height and width sliders.
               </p>
             ) : null}
           </section>
 
-          {/* Section 02: Date & Time */}
+          {/* Section 02: Date & Time (Only Sliders Needed) */}
           <ConsoleDateTime
             inputs={{
               lat: inputs.lat,
@@ -157,13 +195,35 @@ export function GardenPage({
             onPreset={session.applyPreset}
           />
 
-          {/* Section 03: Tree & Vegie Garden */}
+          {/* Section 03: Trees & Vegie Garden Selection Inspector */}
           <ConsoleTreeGarden
-            tree={inputs.tree}
+            trees={inputs.trees}
             garden={inputs.garden}
+            selectedTreeId={selectedTreeId}
+            isGardenSelected={isGardenSelected}
             showHints={showHints}
-            onPatchTree={patchTree}
-            onPatchGarden={patchGarden}
+            onSelectTree={(id) => {
+              setSelectedTreeId(id)
+              if (id) setIsGardenSelected(false)
+            }}
+            onSelectGarden={(selected) => {
+              setIsGardenSelected(selected)
+              if (selected) setSelectedTreeId(null)
+            }}
+            onAddTree={() => {
+              const newId = addTree()
+              setSelectedTreeId(newId)
+              setIsGardenSelected(false)
+            }}
+            onDeleteTree={deleteTree}
+            onUpdateTree={updateTree}
+            onAddGarden={() => {
+              addGarden()
+              setIsGardenSelected(true)
+              setSelectedTreeId(null)
+            }}
+            onDeleteGarden={deleteGarden}
+            onPatchGarden={(partial) => patchGarden(partial)}
           />
         </aside>
 
@@ -176,7 +236,7 @@ export function GardenPage({
                 <div className="print-copy">
                   <h2>Tree &amp; garden section</h2>
                   <p className="print-desc">
-                    Elevation cut through the tree canopy, sun rays, and vegie garden bed.
+                    Elevation cut through tree canopy, sun rays, and vegie garden bed.
                   </p>
                   <p className="print-meta">
                     {formatDate(YEAR, inputs.dayOfYear).label}
@@ -199,7 +259,7 @@ export function GardenPage({
               <div className="section-stage">
                 <ExpandButton className="expand-btn no-print" onClick={() => setPopout('section')} />
                 <GardenSectionCanvas
-                  tree={inputs.tree}
+                  tree={inputs.trees}
                   garden={inputs.garden}
                   instant={instant}
                   sunAlt={sun.alt}
@@ -233,15 +293,14 @@ export function GardenPage({
                 <p>Tree shade footprint vs vegie bed</p>
               </header>
               <GardenSunPlan
-                tree={inputs.tree}
-                garden={inputs.garden}
+                tree={inputs.tree!}
+                garden={inputs.garden ?? { width: 3, length: 6, rotation: 0, offsetEast: 0, offsetNorth: 0 }}
                 instant={instant}
                 sunAlt={sun.alt}
                 sunAz={sun.az}
                 sunRiseAz={sunRise?.az ?? null}
                 sunSetAz={sunSet?.az ?? null}
-                onPatchTree={patchTree}
-                onPatchGarden={patchGarden}
+                onPatchGarden={(partial) => patchGarden(partial)}
               />
             </article>
 
@@ -252,7 +311,7 @@ export function GardenPage({
                 <p>Sunlight yield and crop matches</p>
               </header>
               <GardenResultsPanel
-                tree={inputs.tree}
+                tree={inputs.trees}
                 garden={inputs.garden}
                 instant={instant}
                 daily={daily}
@@ -273,7 +332,7 @@ export function GardenPage({
           </div>
 
           <footer className="fine">
-            Solar position is a NOAA-style estimate. Tree shadow is calculated via 3D ray-casting through the crown ellipsoid and trunk. Satellite map tiles © Esri. Treat results as a design aid for vegetable garden planning.
+            Solar position is a NOAA-style estimate. Tree shadow is calculated via 3D ray-casting through crown ellipsoids and trunks. Satellite map tiles © Esri. Treat results as a design aid for vegetable garden planning.
           </footer>
         </main>
       </div>
@@ -286,7 +345,7 @@ export function GardenPage({
             placeLabel={inputs.placeLabel}
             lat={inputs.lat}
             lon={inputs.lon}
-            tree={inputs.tree}
+            trees={inputs.trees}
             garden={inputs.garden}
             instant={instant}
             sunAlt={sun.alt}
@@ -295,13 +354,37 @@ export function GardenPage({
             locateLabel={session.locateLabel}
             active
             large
+            selectedTreeId={selectedTreeId}
+            isGardenSelected={isGardenSelected}
+            onSelectTree={(id) => {
+              setSelectedTreeId(id)
+              if (id) setIsGardenSelected(false)
+            }}
+            onSelectGarden={(selected) => {
+              setIsGardenSelected(selected)
+              if (selected) setSelectedTreeId(null)
+            }}
+            onAddTree={(treeLat, treeLon) => {
+              const newId = addTree(treeLat, treeLon)
+              setSelectedTreeId(newId)
+              setIsGardenSelected(false)
+            }}
+            onDeleteTree={deleteTree}
+            onMoveTree={moveTree}
+            onUpdateTree={updateTree}
+            onAddGarden={(gLat, gLon) => {
+              addGarden(gLat, gLon)
+              setIsGardenSelected(true)
+              setSelectedTreeId(null)
+            }}
+            onDeleteGarden={deleteGarden}
+            onGardenOffset={(offsetEast, offsetNorth) => patchGarden({ offsetEast, offsetNorth })}
+            onGardenPatch={(partial) => patchGarden(partial)}
             onUserEdit={session.markPlaceTouched}
             onPick={(lat, lon, label) => {
               session.markPlaceTouched()
               session.setLocation(lat, lon, true, label)
             }}
-            onTreeLocation={(lat, lon) => session.setTreePosition(lat, lon)}
-            onGardenOffset={(offsetEast, offsetNorth) => patchGarden({ offsetEast, offsetNorth })}
             onLocate={() => session.locateDevice()}
           />
         </Popout>
@@ -327,7 +410,7 @@ export function GardenPage({
       {popout === 'section' ? (
         <Popout title="Tree & vegie garden section" onClose={() => setPopout(null)}>
           <GardenSectionCanvas
-            tree={inputs.tree}
+            tree={inputs.trees}
             garden={inputs.garden}
             instant={instant}
             sunAlt={sun.alt}

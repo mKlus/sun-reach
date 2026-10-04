@@ -1,4 +1,4 @@
-import type { GardenConfig, TreeConfig } from '../lib/gardenModel'
+import type { GardenConfig, TreeConfig, TreeItem } from '../lib/gardenModel'
 import type { GardenInstantSun } from '../lib/gardenSolar'
 import { ExpandButton } from './ExpandButton'
 import { GardenMap } from './GardenMap'
@@ -10,8 +10,8 @@ type GardenLocationPaneProps = {
   placeLabel: string
   lat: number
   lon: number
-  tree: TreeConfig
-  garden: GardenConfig
+  trees: TreeItem[]
+  garden: GardenConfig | null
   instant: GardenInstantSun
   sunAlt: number
   sunAz: number
@@ -19,12 +19,24 @@ type GardenLocationPaneProps = {
   locateLabel: string
   active: boolean
   large?: boolean
+  selectedTreeId: string | null
+  isGardenSelected: boolean
+  onSelectTree: (id: string | null) => void
+  onSelectGarden: (selected: boolean) => void
+  onAddTree: (lat?: number, lon?: number) => void
+  onDeleteTree: (id: string) => void
+  onMoveTree: (id: string, lat: number, lon: number) => void
+  onUpdateTree: (id: string, partial: Partial<TreeItem>) => void
+  onAddGarden: (lat?: number, lon?: number) => void
+  onDeleteGarden: () => void
+  onGardenOffset: (offsetEast: number, offsetNorth: number) => void
+  onGardenPatch: (partial: Partial<GardenConfig>) => void
   onUserEdit: () => void
   onPick: (lat: number, lon: number, label: string) => void
-  onTreeLocation: (lat: number, lon: number) => void
-  onGardenOffset: (offsetEast: number, offsetNorth: number) => void
   onLocate: () => void
   onExpand?: () => void
+  // Legacy
+  tree?: TreeConfig
 }
 
 export function GardenLocationPane({
@@ -32,7 +44,7 @@ export function GardenLocationPane({
   placeLabel,
   lat,
   lon,
-  tree,
+  trees,
   garden,
   instant,
   sunAlt,
@@ -41,10 +53,20 @@ export function GardenLocationPane({
   locateLabel,
   active,
   large = false,
+  selectedTreeId,
+  isGardenSelected,
+  onSelectTree,
+  onSelectGarden,
+  onAddTree,
+  onDeleteTree,
+  onMoveTree,
+  onUpdateTree,
+  onAddGarden,
+  onDeleteGarden,
+  onGardenOffset,
+  onGardenPatch,
   onUserEdit,
   onPick,
-  onTreeLocation,
-  onGardenOffset,
   onLocate,
   onExpand,
 }: GardenLocationPaneProps) {
@@ -56,14 +78,25 @@ export function GardenLocationPane({
           <GardenMap
             lat={lat}
             lon={lon}
-            tree={tree}
+            trees={trees}
             garden={garden}
             instant={instant}
             sunAlt={sunAlt}
             sunAz={sunAz}
             recenter={recenter}
-            onTreeLocation={onTreeLocation}
+            selectedTreeId={selectedTreeId}
+            isGardenSelected={isGardenSelected}
+            onSelectTree={onSelectTree}
+            onSelectGarden={onSelectGarden}
+            onAddTree={onAddTree}
+            onDeleteTree={onDeleteTree}
+            onMoveTree={onMoveTree}
+            onUpdateTree={onUpdateTree}
+            onAddGarden={onAddGarden}
+            onDeleteGarden={onDeleteGarden}
             onGardenOffset={onGardenOffset}
+            onGardenPatch={onGardenPatch}
+            onPickLocation={(clickLat, clickLon) => onPick(clickLat, clickLon, `${clickLat.toFixed(4)}, ${clickLon.toFixed(4)}`)}
           />
         ) : (
           <div className="map-el" />

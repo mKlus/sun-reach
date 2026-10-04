@@ -487,6 +487,10 @@ h2 {
   background: var(--map-void);
 }
 
+.garden-page .map-frame {
+  height: 380px;
+}
+
 .map-el {
   width: 100%;
   height: 100%;

@@ -107,7 +107,7 @@ describe('gardenSolar', () => {
   })
 
   it('returns night / shaded when sun altitude <= 0', () => {
-    const trees = getTreeInstances(DEFAULT_GARDEN_INPUTS.tree)
+    const trees = getTreeInstances(DEFAULT_GARDEN_INPUTS.tree!)
     expect(isPointInTreeShadow({ x: 0, y: 0 }, trees, -2, 180)).toBe(true)
   })
 
@@ -187,10 +187,10 @@ describe('gardenSolar', () => {
   })
 
   it('generates shadow and canopy polygons', () => {
-    const shadowPolys = getTreeShadowPolygons(DEFAULT_GARDEN_INPUTS.tree, 45, 180)
-    expect(shadowPolys.length).toBe(DEFAULT_GARDEN_INPUTS.tree.treeCount)
+    const shadowPolys = getTreeShadowPolygons(DEFAULT_GARDEN_INPUTS.tree!, 45, 180)
+    expect(shadowPolys.length).toBe(DEFAULT_GARDEN_INPUTS.tree!.treeCount)
 
-    const canopyPolys = getTreeCanopyPolygons(DEFAULT_GARDEN_INPUTS.tree)
-    expect(canopyPolys.length).toBe(DEFAULT_GARDEN_INPUTS.tree.treeCount)
+    const canopyPolys = getTreeCanopyPolygons(DEFAULT_GARDEN_INPUTS.tree!)
+    expect(canopyPolys.length).toBe(DEFAULT_GARDEN_INPUTS.tree!.treeCount)
   })
 })

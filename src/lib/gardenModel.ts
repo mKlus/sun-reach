@@ -3,6 +3,15 @@ import { OPERA_HOUSE } from './model'
 
 export type TreeMode = 'single' | 'group'
 
+export type TreeItem = {
+  id: string
+  lat: number
+  lon: number
+  height: number
+  diameter: number
+  trunkHeight: number
+}
+
 export type TreeConfig = {
   mode: TreeMode
   height: number
@@ -27,8 +36,10 @@ export type GardenInputs = {
   placeLabel: string
   dayOfYear: number
   timeMinutes: number
-  tree: TreeConfig
-  garden: GardenConfig
+  trees: TreeItem[]
+  garden: GardenConfig | null
+  // Keep legacy tree for backward-compatibility if needed
+  tree?: TreeConfig
 }
 
 export const TREE_HEIGHT_MIN = 1.5
@@ -46,8 +57,8 @@ export const GARDEN_WIDTH_MIN = 1
 export const GARDEN_WIDTH_MAX = 15
 export const GARDEN_LENGTH_MIN = 1
 export const GARDEN_LENGTH_MAX = 25
-export const GARDEN_OFFSET_MIN = -30
-export const GARDEN_OFFSET_MAX = 30
+export const GARDEN_OFFSET_MIN = -50
+export const GARDEN_OFFSET_MAX = 50
 
 export const DEFAULT_GARDEN_INPUTS: GardenInputs = {
   lat: OPERA_HOUSE.lat,
@@ -55,21 +66,39 @@ export const DEFAULT_GARDEN_INPUTS: GardenInputs = {
   placeLabel: 'Sydney Opera House',
   dayOfYear: 213, // Aug 1
   timeMinutes: 10 * 60, // 10:00 AM
+  trees: [
+    {
+      id: 'tree-1',
+      lat: OPERA_HOUSE.lat,
+      lon: OPERA_HOUSE.lon,
+      height: 6.0,
+      diameter: 4.0,
+      trunkHeight: 1.5,
+    },
+    {
+      id: 'tree-2',
+      lat: OPERA_HOUSE.lat + 0.00003,
+      lon: OPERA_HOUSE.lon + 0.00006,
+      height: 5.5,
+      diameter: 3.5,
+      trunkHeight: 1.5,
+    },
+  ],
+  garden: {
+    width: 3.0,
+    length: 6.0,
+    rotation: 0, // North-South bed
+    offsetEast: 1.5,
+    offsetNorth: -6.0, // 6m South of tree anchor (shaded in Southern hemisphere winter)
+  },
   tree: {
     mode: 'group',
     height: 6.0,
     diameter: 3.5,
     groupWidth: 12.0,
     treeCount: 4,
-    rotation: 90, // East-West row
+    rotation: 90,
     trunkHeight: 1.5,
-  },
-  garden: {
-    width: 3.0,
-    length: 6.0,
-    rotation: 0, // North-South bed
-    offsetEast: 1.5,
-    offsetNorth: -6.0, // 6m South of tree row (shaded by winter sun in Southern hemisphere)
   },
 }
 
@@ -139,6 +168,34 @@ export function getTreeInstances(tree: TreeConfig): TreeInstance[] {
   return trees
 }
 
+/** Compute individual tree instances from an array of TreeItem positioned relative to scene anchor. */
+export function getTreeInstancesFromItems(
+  items: TreeItem[],
+  anchorLat: number,
+  anchorLon: number,
+): TreeInstance[] {
+  return items.map((t, idx) => {
+    const north = (t.lat - anchorLat) * 111320
+    const east = (t.lon - anchorLon) * (111320 * Math.max(0.2, Math.cos((anchorLat * Math.PI) / 180)))
+    const crownRadius = t.diameter / 2
+    const crownBase = Math.min(t.trunkHeight, t.height - 0.5)
+    const crownCenter = (t.height + crownBase) / 2
+    const crownRadiusZ = Math.max(0.5, (t.height - crownBase) / 2)
+    return {
+      id: idx,
+      x: east,
+      y: north,
+      height: t.height,
+      diameter: t.diameter,
+      trunkHeight: t.trunkHeight,
+      crownRadius,
+      crownBase,
+      crownCenter,
+      crownRadiusZ,
+    }
+  })
+}
+
 export type Point2D = { x: number; y: number }
 
 /** Returns the 4 corners of the vegie garden rectangle in local ground coordinates (metres). */
@@ -206,28 +263,68 @@ export function getGardenGrid(
 }
 
 export function clampGardenInputs(inputs: GardenInputs): GardenInputs {
+  const lat = clamp(inputs.lat, -90, 90)
+  const lon = clamp(inputs.lon, -180, 180)
+
+  // Ensure trees array exists
+  let rawTrees = inputs.trees
+  if (!rawTrees || !Array.isArray(rawTrees) || rawTrees.length === 0) {
+    if (inputs.tree) {
+      // Migrate from legacy tree config
+      const legacyInstances = getTreeInstances(inputs.tree)
+      rawTrees = legacyInstances.map((t, idx) => ({
+        id: `tree-${idx + 1}`,
+        lat: lat + t.y / 111320,
+        lon: lon + t.x / (111320 * Math.max(0.2, Math.cos((lat * Math.PI) / 180))),
+        height: t.height,
+        diameter: t.diameter,
+        trunkHeight: t.trunkHeight,
+      }))
+    } else {
+      rawTrees = DEFAULT_GARDEN_INPUTS.trees
+    }
+  }
+
+  const clampedTrees: TreeItem[] = rawTrees.map((t, idx) => ({
+    id: t.id || `tree-${idx + 1}`,
+    lat: clamp(t.lat, -90, 90),
+    lon: clamp(t.lon, -180, 180),
+    height: clamp(t.height, TREE_HEIGHT_MIN, TREE_HEIGHT_MAX),
+    diameter: clamp(t.diameter, TREE_DIAMETER_MIN, TREE_DIAMETER_MAX),
+    trunkHeight: clamp(t.trunkHeight ?? 1.5, TRUNK_HEIGHT_MIN, TRUNK_HEIGHT_MAX),
+  }))
+
+  const garden = inputs.garden
+    ? {
+        width: clamp(inputs.garden.width, GARDEN_WIDTH_MIN, GARDEN_WIDTH_MAX),
+        length: clamp(inputs.garden.length, GARDEN_LENGTH_MIN, GARDEN_LENGTH_MAX),
+        rotation: wrapDegrees(Math.round(inputs.garden.rotation)),
+        offsetEast: clamp(inputs.garden.offsetEast, GARDEN_OFFSET_MIN, GARDEN_OFFSET_MAX),
+        offsetNorth: clamp(inputs.garden.offsetNorth, GARDEN_OFFSET_MIN, GARDEN_OFFSET_MAX),
+      }
+    : null
+
+  // Synthesize legacy tree for any legacy consumers
+  const firstTree = clampedTrees[0] || DEFAULT_GARDEN_INPUTS.trees[0]
+  const legacyTree: TreeConfig = {
+    mode: clampedTrees.length > 1 ? 'group' : 'single',
+    height: firstTree.height,
+    diameter: firstTree.diameter,
+    groupWidth: 12,
+    treeCount: clampedTrees.length,
+    rotation: 90,
+    trunkHeight: firstTree.trunkHeight,
+  }
+
   return {
     ...inputs,
-    lat: clamp(inputs.lat, -90, 90),
-    lon: clamp(inputs.lon, -180, 180),
+    lat,
+    lon,
     dayOfYear: clamp(Math.round(inputs.dayOfYear), 1, 366),
     timeMinutes: clamp(Math.round(inputs.timeMinutes), 0, 1439),
-    tree: {
-      mode: inputs.tree.mode === 'single' ? 'single' : 'group',
-      height: clamp(inputs.tree.height, TREE_HEIGHT_MIN, TREE_HEIGHT_MAX),
-      diameter: clamp(inputs.tree.diameter, TREE_DIAMETER_MIN, TREE_DIAMETER_MAX),
-      groupWidth: clamp(inputs.tree.groupWidth, GROUP_WIDTH_MIN, GROUP_WIDTH_MAX),
-      treeCount: clamp(Math.round(inputs.tree.treeCount), TREE_COUNT_MIN, TREE_COUNT_MAX),
-      rotation: wrapDegrees(Math.round(inputs.tree.rotation)),
-      trunkHeight: clamp(inputs.tree.trunkHeight, TRUNK_HEIGHT_MIN, TRUNK_HEIGHT_MAX),
-    },
-    garden: {
-      width: clamp(inputs.garden.width, GARDEN_WIDTH_MIN, GARDEN_WIDTH_MAX),
-      length: clamp(inputs.garden.length, GARDEN_LENGTH_MIN, GARDEN_LENGTH_MAX),
-      rotation: wrapDegrees(Math.round(inputs.garden.rotation)),
-      offsetEast: clamp(inputs.garden.offsetEast, GARDEN_OFFSET_MIN, GARDEN_OFFSET_MAX),
-      offsetNorth: clamp(inputs.garden.offsetNorth, GARDEN_OFFSET_MIN, GARDEN_OFFSET_MAX),
-    },
+    trees: clampedTrees,
+    garden,
+    tree: legacyTree,
   }
 }
 
@@ -239,8 +336,6 @@ export function loadGardenInputs(): GardenInputs {
     return clampGardenInputs({
       ...DEFAULT_GARDEN_INPUTS,
       ...parsed,
-      tree: { ...DEFAULT_GARDEN_INPUTS.tree, ...parsed.tree },
-      garden: { ...DEFAULT_GARDEN_INPUTS.garden, ...parsed.garden },
     })
   } catch {
     return DEFAULT_GARDEN_INPUTS

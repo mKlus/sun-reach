@@ -114,11 +114,23 @@ export function useGardenSunSeries(inputs: GardenInputs): GardenCalcModel {
     [hasHorizon, inputs.lat, inputs.lon, date.year, date.month, date.day, daylight.sunsetMin, tz.hours],
   )
 
-  const gridCells = useMemo(() => getGardenGrid(inputs.garden, 8, 12), [inputs.garden])
+  const gridCells = useMemo(
+    () => (inputs.garden ? getGardenGrid(inputs.garden, 8, 12) : []),
+    [inputs.garden],
+  )
 
   const instant = useMemo(
-    () => computeGardenInstantSun(inputs.garden, inputs.tree, sun.alt, sun.az, gridCells),
-    [inputs.garden, inputs.tree, sun.alt, sun.az, gridCells],
+    () =>
+      computeGardenInstantSun(
+        inputs.garden,
+        inputs.trees,
+        sun.alt,
+        sun.az,
+        gridCells,
+        inputs.lat,
+        inputs.lon,
+      ),
+    [inputs.garden, inputs.trees, sun.alt, sun.az, gridCells, inputs.lat, inputs.lon],
   )
 
   const daily = useMemo(
@@ -131,7 +143,7 @@ export function useGardenSunSeries(inputs: GardenInputs): GardenCalcModel {
         day: date.day,
         tzHours: tz.hours,
         garden: inputs.garden,
-        tree: inputs.tree,
+        trees: inputs.trees,
         sunriseMin: daylight.sunriseMin,
         sunsetMin: daylight.sunsetMin,
         stepMin: 5,
@@ -144,7 +156,7 @@ export function useGardenSunSeries(inputs: GardenInputs): GardenCalcModel {
       date.day,
       tz.hours,
       inputs.garden,
-      inputs.tree,
+      inputs.trees,
       daylight.sunriseMin,
       daylight.sunsetMin,
     ],
@@ -155,7 +167,7 @@ export function useGardenSunSeries(inputs: GardenInputs): GardenCalcModel {
       lat: inputs.lat,
       lon: inputs.lon,
       garden: inputs.garden,
-      tree: inputs.tree,
+      trees: inputs.trees,
     },
     240,
   )
@@ -167,7 +179,7 @@ export function useGardenSunSeries(inputs: GardenInputs): GardenCalcModel {
         lon: debouncedYearInputs.lon,
         year: YEAR,
         garden: debouncedYearInputs.garden,
-        tree: debouncedYearInputs.tree,
+        trees: debouncedYearInputs.trees,
         dayStep: 4,
         timeStep: 10,
       }),

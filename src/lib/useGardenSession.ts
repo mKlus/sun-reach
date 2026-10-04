@@ -9,6 +9,7 @@ import {
   type GardenConfig,
   type GardenInputs,
   type TreeConfig,
+  type TreeItem,
 } from './gardenModel'
 import { YEAR } from './model'
 import { dateFromDayOfYear, dayOfYearOn, getDaylight, getTimezone, siteCivilNow } from './solar'
@@ -37,16 +38,16 @@ export function useGardenSession(initialInputs?: Partial<GardenInputs>) {
     setInputs((prev) =>
       clampGardenInputs({
         ...prev,
-        tree: { ...prev.tree, ...partial },
+        tree: { ...(prev.tree ?? DEFAULT_GARDEN_INPUTS.tree!), ...partial },
       }),
     )
   }
 
-  function patchGarden(partial: Partial<GardenConfig>) {
+  function patchGarden(partial: Partial<GardenConfig> | null) {
     setInputs((prev) =>
       clampGardenInputs({
         ...prev,
-        garden: { ...prev.garden, ...partial },
+        garden: partial ? { ...(prev.garden ?? DEFAULT_GARDEN_INPUTS.garden!), ...partial } : null,
       }),
     )
   }
@@ -69,30 +70,81 @@ export function useGardenSession(initialInputs?: Partial<GardenInputs>) {
     }
   }
 
-  function setTreePosition(treeLat: number, treeLon: number) {
-    // When moving the tree directly on the map, maintain the garden's fixed geographic location
-    // by recalculating the offset between the new tree position and existing garden LatLng.
-    const currentGardenCenter = {
-      lat: inputs.lat + inputs.garden.offsetNorth / 111320,
-      lon: inputs.lon + inputs.garden.offsetEast / (111320 * Math.max(0.2, Math.cos((inputs.lat * Math.PI) / 180))),
+  function addTree(treeLat?: number, treeLon?: number) {
+    const lat = treeLat ?? inputs.lat
+    const lon = treeLon ?? inputs.lon
+    const id = `tree-${Date.now()}`
+    const newTree: TreeItem = {
+      id,
+      lat,
+      lon,
+      height: 6.0,
+      diameter: 4.0,
+      trunkHeight: 1.5,
     }
-    const newOffsetNorth = (currentGardenCenter.lat - treeLat) * 111320
-    const newOffsetEast =
-      (currentGardenCenter.lon - treeLon) *
-      (111320 * Math.max(0.2, Math.cos((treeLat * Math.PI) / 180)))
-
     setInputs((prev) =>
       clampGardenInputs({
         ...prev,
-        lat: treeLat,
-        lon: treeLon,
-        garden: {
-          ...prev.garden,
-          offsetEast: Math.round(newOffsetEast * 10) / 10,
-          offsetNorth: Math.round(newOffsetNorth * 10) / 10,
-        },
+        trees: [...prev.trees, newTree],
       }),
     )
+    return id
+  }
+
+  function updateTree(id: string, partial: Partial<TreeItem>) {
+    setInputs((prev) =>
+      clampGardenInputs({
+        ...prev,
+        trees: prev.trees.map((t) => (t.id === id ? { ...t, ...partial } : t)),
+      }),
+    )
+  }
+
+  function moveTree(id: string, lat: number, lon: number) {
+    updateTree(id, { lat, lon })
+  }
+
+  function deleteTree(id: string) {
+    setInputs((prev) =>
+      clampGardenInputs({
+        ...prev,
+        trees: prev.trees.filter((t) => t.id !== id),
+      }),
+    )
+  }
+
+  function addGarden(lat?: number, lon?: number) {
+    const targetLat = lat ?? inputs.lat - 0.00005
+    const targetLon = lon ?? inputs.lon + 0.00002
+    const north = (targetLat - inputs.lat) * 111320
+    const east = (targetLon - inputs.lon) * (111320 * Math.max(0.2, Math.cos((inputs.lat * Math.PI) / 180)))
+    const newGarden: GardenConfig = {
+      width: 3.0,
+      length: 6.0,
+      rotation: 0,
+      offsetEast: Math.round(east * 10) / 10,
+      offsetNorth: Math.round(north * 10) / 10,
+    }
+    setInputs((prev) =>
+      clampGardenInputs({
+        ...prev,
+        garden: newGarden,
+      }),
+    )
+  }
+
+  function deleteGarden() {
+    setInputs((prev) =>
+      clampGardenInputs({
+        ...prev,
+        garden: null,
+      }),
+    )
+  }
+
+  function setTreePosition(treeLat: number, treeLon: number) {
+    // If moving scene anchor
+    patch({ lat: treeLat, lon: treeLon })
   }
 
   function markPlaceTouched() {
@@ -223,5 +275,11 @@ export function useGardenSession(initialInputs?: Partial<GardenInputs>) {
     applyPreset,
     setClock,
     setTreePosition,
+    addTree,
+    updateTree,
+    deleteTree,
+    moveTree,
+    addGarden,
+    deleteGarden,
   }
 }

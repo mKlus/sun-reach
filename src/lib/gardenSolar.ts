@@ -11,11 +11,13 @@ import {
 import {
   getGardenGrid,
   getTreeInstances,
+  getTreeInstancesFromItems,
   type GardenConfig,
   type GardenGridCell,
   type Point2D,
   type TreeConfig,
   type TreeInstance,
+  type TreeItem,
 } from './gardenModel'
 
 export type GardenInstantSun = {
@@ -85,27 +87,60 @@ export function isPointInTreeShadow(
   return false
 }
 
+export function resolveTrees(
+  treeOrInstances?: TreeConfig | TreeInstance[] | TreeItem[],
+  anchorLat?: number,
+  anchorLon?: number,
+): TreeInstance[] {
+  if (!treeOrInstances) return []
+  if (Array.isArray(treeOrInstances)) {
+    if (treeOrInstances.length === 0) return []
+    // Check if it's already TreeInstance (has crownRadius)
+    if ('crownRadius' in treeOrInstances[0]) {
+      return treeOrInstances as TreeInstance[]
+    }
+    // It is TreeItem[]
+    return getTreeInstancesFromItems(
+      treeOrInstances as TreeItem[],
+      anchorLat ?? 0,
+      anchorLon ?? 0,
+    )
+  }
+  return getTreeInstances(treeOrInstances as TreeConfig)
+}
+
 /** Compute instant solar metrics for the vegie garden. */
 export function computeGardenInstantSun(
-  garden: GardenConfig,
-  tree: TreeConfig,
+  garden: GardenConfig | null | undefined,
+  treeOrInstances: TreeConfig | TreeInstance[] | TreeItem[],
   sunAlt: number,
   sunAz: number,
   gridCells?: GardenGridCell[],
+  anchorLat = 0,
+  anchorLon = 0,
 ): GardenInstantSun {
-  const trees = getTreeInstances(tree)
-  const cells = gridCells ?? getGardenGrid(garden)
-  const totalArea = garden.width * garden.length
+  const trees = resolveTrees(treeOrInstances, anchorLat, anchorLon)
+  const effectiveGarden = garden ?? {
+    width: 3,
+    length: 5,
+    rotation: 0,
+    offsetEast: 0,
+    offsetNorth: 0,
+  }
+  const cells = garden ? (gridCells ?? getGardenGrid(effectiveGarden)) : []
+  const totalArea = garden ? effectiveGarden.width * effectiveGarden.length : 0
 
   const gridStates = cells.map((cell) => !isPointInTreeShadow(cell, trees, sunAlt, sunAz))
   const sunlitCount = gridStates.filter(Boolean).length
-  const sunlitRatio = cells.length > 0 ? sunlitCount / cells.length : 0
+  const sunlitRatio = cells.length > 0 ? sunlitCount / cells.length : 1
   const sunlitPercent = sunlitRatio * 100
   const sunlitAreaM2 = sunlitRatio * totalArea
 
   let status: GardenInstantSun['status'] = 'night'
   if (sunAlt <= 0) {
     status = 'night'
+  } else if (!garden) {
+    status = 'full-sun'
   } else if (sunlitRatio >= 0.95) {
     status = 'full-sun'
   } else if (sunlitRatio <= 0.05) {
@@ -114,13 +149,13 @@ export function computeGardenInstantSun(
     status = 'partial-sun'
   }
 
-  const maxHeight = tree.height
+  const maxHeight = trees.reduce((m, t) => Math.max(m, t.height), 0)
   const shadowLengthMax =
-    sunAlt > 0.1 ? maxHeight / Math.tan(toRad(sunAlt)) : 0
+    sunAlt > 0.1 && maxHeight > 0 ? maxHeight / Math.tan(toRad(sunAlt)) : 0
   const shadowAzimuth = wrapDegrees(sunAz + 180)
 
-  const dist = Math.hypot(garden.offsetEast, garden.offsetNorth)
-  const bearing = wrapDegrees(toDeg(Math.atan2(garden.offsetEast, garden.offsetNorth)))
+  const dist = Math.hypot(effectiveGarden.offsetEast, effectiveGarden.offsetNorth)
+  const bearing = wrapDegrees(toDeg(Math.atan2(effectiveGarden.offsetEast, effectiveGarden.offsetNorth)))
 
   return {
     sunlitRatio,
@@ -230,8 +265,10 @@ export type GardenDailySample = {
   month: number
   day: number
   tzHours: number
-  garden: GardenConfig
-  tree: TreeConfig
+  garden: GardenConfig | null
+  tree?: TreeConfig
+  trees?: TreeItem[]
+  treeInstances?: TreeInstance[]
   sunriseMin: number
   sunsetMin: number
   stepMin?: number
@@ -240,7 +277,21 @@ export type GardenDailySample = {
 /** Compute full daily solar integration for the vegie garden. */
 export function computeGardenDailySun(sample: GardenDailySample): GardenDailySun {
   const step = Math.max(2, Math.round(sample.stepMin ?? 5))
-  const trees = getTreeInstances(sample.tree)
+  const trees = resolveTrees(sample.treeInstances ?? sample.trees ?? sample.tree, sample.lat, sample.lon)
+  if (!sample.garden) {
+    return {
+      daylightMinutes: Math.max(0, sample.sunsetMin - sample.sunriseMin),
+      directSunHoursAvg: 0,
+      directSunHoursMin: 0,
+      directSunHoursMax: 0,
+      dailyDoseM2h: 0,
+      peakSunlitArea: 0,
+      suitability: getCropSuitability(0),
+      dayCurve: [],
+      gridSunHours: [],
+    }
+  }
+
   const cells = getGardenGrid(sample.garden)
   const cellSunMinutes = new Float64Array(cells.length)
   const totalArea = sample.garden.width * sample.garden.length
@@ -321,14 +372,17 @@ export type GardenYearlySample = {
   lat: number
   lon: number
   year: number
-  garden: GardenConfig
-  tree: TreeConfig
+  garden: GardenConfig | null
+  tree?: TreeConfig
+  trees?: TreeItem[]
+  treeInstances?: TreeInstance[]
   dayStep?: number
   timeStep?: number
 }
 
 /** Compute seasonal direct sun hours on the vegie garden across the year. */
 export function computeGardenYearlySun(sample: GardenYearlySample): GardenYearPoint[] {
+  if (!sample.garden) return []
   const dayStep = Math.max(1, Math.round(sample.dayStep ?? 3))
   const timeStep = Math.max(5, Math.round(sample.timeStep ?? 10))
   const points: GardenYearPoint[] = []
@@ -364,6 +418,8 @@ export function computeGardenYearlySun(sample: GardenYearlySample): GardenYearPo
       tzHours: tz.hours,
       garden: sample.garden,
       tree: sample.tree,
+      trees: sample.trees,
+      treeInstances: sample.treeInstances,
       sunriseMin: daylight.sunriseMin,
       sunsetMin: daylight.sunsetMin,
       stepMin: timeStep,
@@ -382,13 +438,15 @@ export function computeGardenYearlySun(sample: GardenYearlySample): GardenYearPo
 
 /** Generate polygon points (in local metres East/North) for tree shadow on ground. */
 export function getTreeShadowPolygons(
-  tree: TreeConfig,
+  treeOrInstances: TreeConfig | TreeInstance[] | TreeItem[],
   sunAlt: number,
   sunAz: number,
+  anchorLat = 0,
+  anchorLon = 0,
 ): Array<Array<[number, number]>> {
   if (sunAlt <= 0.05) return []
 
-  const trees = getTreeInstances(tree)
+  const trees = resolveTrees(treeOrInstances, anchorLat, anchorLon)
   const altRad = toRad(sunAlt)
   const tanAlt = Math.tan(altRad)
   if (tanAlt <= 1e-4) return []
@@ -436,8 +494,12 @@ export function getTreeShadowPolygons(
 }
 
 /** Generate circle points for tree canopy footprint on ground. */
-export function getTreeCanopyPolygons(tree: TreeConfig): Array<Array<[number, number]>> {
-  const trees = getTreeInstances(tree)
+export function getTreeCanopyPolygons(
+  treeOrInstances: TreeConfig | TreeInstance[] | TreeItem[],
+  anchorLat = 0,
+  anchorLon = 0,
+): Array<Array<[number, number]>> {
+  const trees = resolveTrees(treeOrInstances, anchorLat, anchorLon)
   const polygons: Array<Array<[number, number]>> = []
   const numPts = 24
 

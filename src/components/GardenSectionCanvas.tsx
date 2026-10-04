@@ -1,10 +1,10 @@
-import type { GardenConfig, TreeConfig } from '../lib/gardenModel'
+import type { GardenConfig, TreeConfig, TreeItem } from '../lib/gardenModel'
 import type { GardenInstantSun } from '../lib/gardenSolar'
 import { toRad } from '../lib/solar'
 
 type GardenSectionCanvasProps = {
-  tree: TreeConfig
-  garden: GardenConfig
+  tree: TreeConfig | TreeItem[]
+  garden?: GardenConfig | null
   instant: GardenInstantSun
   sunAlt: number
   sunAz: number
@@ -24,16 +24,37 @@ export function GardenSectionCanvas({
   const H = large ? 480 : 360
   const groundY = H - 65
 
+  // Pick representative tree
+  const singleTree: TreeConfig = Array.isArray(tree)
+    ? {
+        mode: 'single',
+        height: tree[0]?.height ?? 6.0,
+        diameter: tree[0]?.diameter ?? 4.0,
+        groupWidth: 4.0,
+        treeCount: 1,
+        rotation: 0,
+        trunkHeight: tree[0]?.trunkHeight ?? 1.5,
+      }
+    : tree
+
+  const activeGarden: GardenConfig = garden ?? {
+    width: 3.0,
+    length: 6.0,
+    rotation: 0,
+    offsetEast: 0,
+    offsetNorth: 0,
+  }
+
   // Distance from tree base (0,0) to garden center
-  const dist = Math.max(0.5, Math.hypot(garden.offsetEast, garden.offsetNorth))
+  const dist = Math.max(0.5, Math.hypot(activeGarden.offsetEast, activeGarden.offsetNorth))
   const bearingToGarden = instant.bearingTreeToGarden
 
   // Effective garden span along the tree-to-garden section line:
-  const bedAngleRel = toRad(garden.rotation - bearingToGarden)
+  const bedAngleRel = toRad(activeGarden.rotation - bearingToGarden)
   const bedSpan = Math.max(
     1.5,
-    Math.abs(garden.length * Math.cos(bedAngleRel)) +
-      Math.abs(garden.width * Math.sin(bedAngleRel)),
+    Math.abs(activeGarden.length * Math.cos(bedAngleRel)) +
+      Math.abs(activeGarden.width * Math.sin(bedAngleRel)),
   )
 
   // Solar angles and shadow reach
@@ -47,7 +68,7 @@ export function GardenSectionCanvas({
   const angleDiffRad = toRad(angleDiff)
 
   // Ground shadow length from tree top:
-  const shadowLength = sunElevation > 0.05 ? tree.height / Math.tan(toRad(sunElevation)) : 0
+  const shadowLength = sunElevation > 0.05 ? singleTree.height / Math.tan(toRad(sunElevation)) : 0
 
   // Component of shadow projected along the tree-garden axis:
   // Positive means shadow falls towards the garden (to the right).
@@ -58,7 +79,7 @@ export function GardenSectionCanvas({
   // World coordinates along section line (metres):
   // Tree is at x = 0.
   // Garden is at x = dist (spanning from dist - bedSpan/2 to dist + bedSpan/2).
-  const minWorldX = Math.min(-tree.diameter / 2 - 2, shadowAlongLine < 0 ? shadowAlongLine - 2 : -3)
+  const minWorldX = Math.min(-singleTree.diameter / 2 - 2, shadowAlongLine < 0 ? shadowAlongLine - 2 : -3)
   const maxWorldX = Math.max(dist + bedSpan / 2 + 3, shadowAlongLine > 0 ? shadowAlongLine + 2 : dist + 4, 12)
   const worldSpan = maxWorldX - minWorldX
 
@@ -75,10 +96,10 @@ export function GardenSectionCanvas({
   }
 
   const treeX = toSvgX(0)
-  const treeTopY = toSvgY(tree.height)
-  const trunkY = toSvgY(tree.trunkHeight)
-  const crownRadiusPx = (tree.diameter / 2) * scale
-  const crownRadiusZPx = ((tree.height - tree.trunkHeight) / 2) * scale
+  const treeTopY = toSvgY(singleTree.height)
+  const trunkY = toSvgY(singleTree.trunkHeight)
+  const crownRadiusPx = (singleTree.diameter / 2) * scale
+  const crownRadiusZPx = ((singleTree.height - singleTree.trunkHeight) / 2) * scale
   const crownCenterY = (treeTopY + trunkY) / 2
 
   // Garden coordinates
@@ -104,18 +125,20 @@ export function GardenSectionCanvas({
   const isShadowHittingGarden =
     shadowTowardGarden &&
     shadowAlongLine >= dist - bedSpan / 2 &&
-    shadowOffAxis <= tree.diameter / 2 + Math.max(garden.width, garden.length) / 2
+    shadowOffAxis <= singleTree.diameter / 2 + Math.max(activeGarden.width, activeGarden.length) / 2
 
   // Shadow description
   const statusLabel = isNight
     ? 'Night (Sun below horizon)'
-    : isShadowHittingGarden
-      ? `Tree shade reaching garden (${instant.sunlitPercent.toFixed(0)}% sun)`
-      : shadowTowardGarden
-        ? shadowOffAxis > tree.diameter / 2 + 3
-          ? `Shadow passes sideways (${shadowOffAxis.toFixed(1)}m off-axis)`
-          : `Shadow falls short (${Math.max(0, dist - bedSpan / 2 - shadowAlongLine).toFixed(1)}m clear)`
-        : `Garden on sunny side (100% direct sun)`
+    : !garden
+      ? 'No vegie garden placed'
+      : isShadowHittingGarden
+        ? `Tree shade reaching garden (${instant.sunlitPercent.toFixed(0)}% sun)`
+        : shadowTowardGarden
+          ? shadowOffAxis > singleTree.diameter / 2 + 3
+            ? `Shadow passes sideways (${shadowOffAxis.toFixed(1)}m off-axis)`
+            : `Shadow falls short (${Math.max(0, dist - bedSpan / 2 - shadowAlongLine).toFixed(1)}m clear)`
+          : `Garden on sunny side (100% direct sun)`
 
   return (
     <figure className="section-canvas-wrap" style={{ margin: 0, position: 'relative' }}>
@@ -218,7 +241,7 @@ export function GardenSectionCanvas({
           fontSize={11}
           textAnchor="middle"
         >
-          ⌀ {tree.diameter.toFixed(1)} m
+          ⌀ {singleTree.diameter.toFixed(1)} m
         </text>
 
         <line
@@ -237,7 +260,7 @@ export function GardenSectionCanvas({
           textAnchor="end"
           dominantBaseline="middle"
         >
-          {tree.height.toFixed(1)} m
+          {singleTree.height.toFixed(1)} m
         </text>
 
         {/* Vegie Garden Enclosure */}
