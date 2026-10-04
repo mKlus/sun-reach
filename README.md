@@ -1,9 +1,9 @@
 # Sun Reach
 
-A Vite + React 19 + TypeScript calculator that draws a section through a glass door and patio awning, then tells you:
+A Vite + React 19 + TypeScript solar simulator and architectural design aid featuring two specialized study modes:
 
-- how far the sun patch reaches across the indoor floor
-- how high the awning sits at the **outer end**, given the height at the wall and the roof slope
+1. **House & Awning**: Section through a glass door and sloped awning, calculating indoor solar heating, reach, and summer shade.
+2. **Trees & Vegie Garden**: Satellite map projection and 3D ray-cast shadow simulator for single trees or tree groups/hedges next to a vegie garden enclosure, calculating daily sunlight hours, sunlit area, and seasonal vegetable crop suitability.
 
 On a first visit the app asks for the device location. If that is blocked or missing, it falls back to the **Sydney Opera House**. After that, the site (and the last searched place name) is stored in `localStorage` and restored on the next visit. Stock geometry: door faces **north**, 3 m projection, 3 m wall height, 5° roof fall, a 2 m door and a **10 m** room. First-visit date is 1 August at 09:00; **Reset defaults** sets date and time to civil now at the site.
 
@@ -77,9 +77,89 @@ Rafter length (along the roof) is shown as a readout:
 rafter = projection / cos(slope)
 ```
 
+## Trees & Vegie Garden Study Mode
+
+The **Trees & Vegie Garden** study mode (`?page=garden`) simulates 3D solar shadowing from single trees or tree groups/rows onto a vegetable garden enclosure, calculating direct sunlight hours, shaded vs. sunlit bed area, and seasonal crop suitability.
+
+### Requirements & Feature Specifications
+
+#### 1. Tree & Tree Group Configuration
+- **Single Tree**:
+  - Tree height (1.5 m to 25 m).
+  - Crown diameter (1.0 m to 18 m).
+  - Trunk clearance / canopy base height (0.5 m to 8 m).
+  - Crown shape (ellipsoid / oval foliage).
+- **Group / Row of Trees** (hedges, windbreaks, shelterbelts, or orchard rows):
+  - Tree height and individual crown diameter.
+  - Total group width (2.0 m to 50 m) spanning from the first tree center to the last tree center.
+  - Tree count (2 to 12 trees) with automatic equidistant distribution along the row axis.
+  - Row rotation / orientation angle (0° to 359°, with 0° = North-South row, 90° = East-West row).
+
+#### 2. Vegie Garden Enclosure
+- **Enclosure Dimensions**:
+  - Bed length (1.0 m to 25.0 m).
+  - Bed width (1.0 m to 15.0 m).
+  - Raised bed height (0.1 m to 1.5 m).
+- **Enclosure Rotation**: 0° to 359° orientation to align with fence lines, paths, or north-facing contours.
+- **Surface Sampling**: Discretized into a high-resolution grid (e.g. 6 × 8 = 48 sample points) to calculate exact fractional sunlit area ($m^2$ and percentage) under partial shadows.
+
+#### 3. Map Projection & Visibility (Street Map & Satellite)
+- **Map Layer Switcher**:
+  - **`🗺️ Map` (OpenStreetMap - Default)**: Clear vector street map showing roads, property boundaries, landmarks, and topology at close zoom.
+  - **`🛰️ Satellite` (Esri World Imagery)**: High-resolution aerial imagery.
+- **Dynamic Solar Projection**: Real-time ground shadow polygons cast by tree crowns and trunks according to solar altitude and azimuth.
+- **Draggable Pins**: Both the 🌳 tree anchor pin and the 🥕 vegie garden pin can be dragged directly across the map.
+
+#### 4. Secondary Move & Rotate Controls
+In addition to map dragging, dedicated secondary controls allow sub-meter relative positioning and precise angle rotation:
+- **Move & Rotate Panel (`LayoutControls.tsx`)**:
+  - **Target Toggle**: Select between `[ 🥕 Vegie Garden ]` and `[ 🌳 Trees ]`.
+  - **Directional D-Pad**: Move the active target North, South, East, or West with configurable step sizes (`0.5 m`, `1.0 m`, `2.5 m`).
+  - **Rotation Controls**:
+    - Quick nudge buttons (`-45°`, `-15°`, `+15°`, `+45°`).
+    - Cardinal compass presets (`0° North`, `90° East`, `180° South`, `270° West`).
+    - Continuous 0°–360° rotation slider.
+  - **Polar Offsets**: Sliders for radial distance (1 m to 40 m) and compass bearing (0° to 359°).
+  - **1-Click Quick Align Presets**: Position the vegie garden directly South, North, East, or West of the tree canopy with one click.
+- **Interactive 2D Plan (`GardenSunPlan.tsx`)**:
+  - **Direct SVG Dragging**: Click and drag either the vegie bed or tree row directly on the 2D layout canvas.
+  - **Direct Rotation Levers**: Drag the colored circular rotation handles to rotate the bed enclosure or tree row dynamically.
+  - **Tab Switching**: Toggle between `🧭 2D Sun Plan (Drag/Rotate)` and `🕹️ Move & Rotate Controls` directly in the card.
+
+#### 5. 3D Ray-Casting & Solar Modeling Math
+- **Crown Ellipsoid Intersection**:
+  For each grid point on the garden bed surface $\mathbf{P} = (x_0, y_0, z_0)$ and sun direction unit vector $\mathbf{d} = (d_x, d_y, d_z)$ directed toward the sun:
+  $$\mathbf{R}(t) = \mathbf{P} + t \mathbf{d}, \quad t > 0$$
+  The tree crown is defined as an ellipsoid centered at $(c_x, c_y, c_z)$ with semi-axes $r_x = r_y = \frac{D}{2}$ and $r_z = \frac{H - H_{\text{clear}}}{2}$.
+  Solving the quadratic equation:
+  $$\frac{(x_0 + t d_x - c_x)^2}{r_x^2} + \frac{(y_0 + t d_y - c_y)^2}{r_y^2} + \frac{(z_0 + t d_z - c_z)^2}{r_z^2} = 1$$
+  yields whether a direct solar ray is intercepted by the foliage.
+- **Trunk Cylinder Intersection**:
+  Similarly evaluates ray intersection with a vertical cylinder of radius $r_{\text{trunk}}$ extending from ground level to canopy base $H_{\text{clear}}$.
+- **Elevation Section Cut (`GardenSectionCanvas.tsx`)**:
+  Renders a 2D architectural section along the sun ray azimuth, showing tree canopy clearance, raised garden bed, ray vectors, and ground shadow footprint with dimension lines.
+- **Daily Sun Curve (`GardenDaySunChart.tsx`)**:
+  Calculates instant sunlit percentage and direct sunlit area across the entire daylight period from sunrise to sunset. Includes an interactive time scrubber.
+- **Seasonal Year Curve (`GardenYearSunChart.tsx`)**:
+  Integrates direct solar hours for every day of the year (365 days), highlighting winter solstice (lowest sun) and summer solstice (highest sun). Includes one-click CSV export.
+
+#### 6. Agricultural Crop Suitability Advisor
+Based on the daily average direct sunlight hours received by the vegie garden:
+- **Full Sun (6.0+ hours/day)**:
+  - *Status*: Prime solar location.
+  - *Suitable Crops*: Tomatoes, capsicum/peppers, eggplant, cucumbers, zucchini, squash, melons, sweet corn, beans, pumpkins.
+- **Partial Sun (3.5 to 6.0 hours/day)**:
+  - *Status*: Good partial exposure with afternoon/morning shading.
+  - *Suitable Crops*: Carrots, beetroot, radishes, broccoli, cauliflower, peas, cabbage, silverbeet/chard, spinach, bush beans.
+- **Shade / Partial Shade (< 3.5 hours/day)**:
+  - *Status*: Significant tree shading. Fruiting crops will struggle; focus on leafy greens and shade-tolerant herbs.
+  - *Suitable Crops*: Loose-leaf lettuce, rocket/arugula, Asian greens (bok choy, tatsoi), kale, parsley, mint, coriander, chives.
+
+---
+
 ## Notes
 
-- The map rotates with **Glass door faces** so that direction is up. The north arrow stays pointed at true north. Clicks, pan, and the pin still work because rotation is done in Leaflet, not as a CSS hack.
+- The map rotates with **Glass door faces** in House mode so that direction is up. The north arrow stays pointed at true north. Clicks, pan, and the pin still work because rotation is done in Leaflet, not as a CSS hack.
 - Solar position is a NOAA-style estimate. Australian eastern and central daylight saving (Broken Hill stays on central time), and New Zealand DST (last Sunday in September to first Sunday in April), are applied; other places use a longitude timezone.
-- Map tiles © Esri World Imagery. Search © Esri World Geocoding; Nominatim / OpenStreetMap fallback.
-- This is a design aid, not a survey. It ignores neighbouring buildings, glass setback, frame thickness, and diffuse light.
+- Map tiles: OpenStreetMap (`🗺️ Map`) and Esri World Imagery (`🛰️ Satellite`). Search: Esri World Geocoding with Nominatim / OpenStreetMap fallback.
+- Design aid notice: This tool models solar geometry from configured structures and trees. It ignores surrounding terrain elevation changes and diffuse atmospheric skylight.

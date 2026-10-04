@@ -51,9 +51,16 @@ export function writeSceneHref(inputs: Inputs): string {
   return `${window.location.pathname}${writeSceneSearch(inputs)}${window.location.hash}`
 }
 
-/** Safari throws if replaceState runs more than 100 times in 10 seconds. */
 export function replaceSceneUrl(inputs: Inputs): void {
-  const next = writeSceneHref(inputs)
+  const currentParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+  const page = currentParams?.get('page')
+  let next = writeSceneHref(inputs)
+  if (page) {
+    const [path, search] = next.split('?')
+    const q = new URLSearchParams(search ?? '')
+    q.set('page', page)
+    next = `${path}?${q.toString()}${window.location.hash}`
+  }
   const now = `${window.location.pathname}${window.location.search}${window.location.hash}`
   if (next === now) return
   try {

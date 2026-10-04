@@ -5,6 +5,7 @@ import { ConsoleDateTime } from './components/ConsoleDateTime'
 import { ConsoleLocation } from './components/ConsoleLocation'
 import { DaySunChart } from './components/DaySunChart'
 import { ExpandButton } from './components/ExpandButton'
+import { GardenPage } from './components/GardenPage'
 import { LocationPane } from './components/LocationPane'
 import { Popout } from './components/Popout'
 import { ResultsPanel } from './components/ResultsPanel'
@@ -33,9 +34,28 @@ export default function App() {
   const { model, dayCurve, yearSeries, eaveYear, compareYear, yearAxisMax, dayMax } =
     useSunSeries(inputs)
   const [themePref, setThemePref] = useThemePref()
+  const [page, setPage] = useState<'patio' | 'garden'>(() => {
+    if (typeof window !== 'undefined') {
+      const q = new URLSearchParams(window.location.search)
+      if (q.get('page') === 'garden' || window.location.hash === '#garden') return 'garden'
+    }
+    return 'patio'
+  })
   const [showHints, setShowHints] = useState(false)
   const [copyLabel, setCopyLabel] = useState('Copy link')
   const [popout, setPopout] = useState<null | 'map' | 'day' | 'year' | 'section'>(null)
+
+  function handlePageChange(nextPage: 'patio' | 'garden') {
+    setPage(nextPage)
+    const q = new URLSearchParams(window.location.search)
+    if (nextPage === 'garden') {
+      q.set('page', 'garden')
+    } else {
+      q.delete('page')
+    }
+    const search = q.toString() ? `?${q.toString()}` : window.location.pathname
+    window.history.replaceState(null, '', search)
+  }
 
   function setClock(timeMinutes: number) {
     patch({
@@ -55,20 +75,55 @@ export default function App() {
             <svg viewBox="0 0 36 36">
               <rect className="mark-plate" width="36" height="36" rx="10" />
               <circle cx="26" cy="10" r="4" fill="#ff8a3c" />
-              <path className="mark-wall" d="M8 26V13.2L26 17.4V26" fill="none" strokeWidth="1.6" />
-              <path d="M8 13.2 26 17.4" stroke="#ff8a3c" strokeWidth="2.4" strokeLinecap="square" />
-              <rect x="7" y="16.4" width="2.3" height="9.6" fill="#3ec8d8" />
+              {page === 'patio' ? (
+                <>
+                  <path className="mark-wall" d="M8 26V13.2L26 17.4V26" fill="none" strokeWidth="1.6" />
+                  <path d="M8 13.2 26 17.4" stroke="#ff8a3c" strokeWidth="2.4" strokeLinecap="square" />
+                  <rect x="7" y="16.4" width="2.3" height="9.6" fill="#3ec8d8" />
+                </>
+              ) : (
+                <>
+                  <rect x="15" y="19" width="3.2" height="8" rx="1" fill="#8d4925" />
+                  <circle cx="16.6" cy="14.5" r="6.5" fill="#34a853" />
+                  <rect x="22" y="23" width="7" height="4" rx="1" fill="#e07a2f" />
+                </>
+              )}
             </svg>
           </span>
           <div>
-            <p className="eyebrow">Patio study</p>
-            <h1>Sun Reach</h1>
+            <p className="eyebrow">{page === 'patio' ? 'Patio study' : 'Garden study'}</p>
+            <h1>{page === 'patio' ? 'Sun Reach' : 'Tree & Garden Sun'}</h1>
           </div>
         </div>
-        <p className="lede">
-          Section through a glass door and sloped awning. Set the site, facing, and roof slope —
-          then read how much winter sun can heat the room.
-        </p>
+
+        <div className="mast-middle">
+          <nav className="nav-tabs" role="tablist" aria-label="Study modes">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={page === 'patio'}
+              className={`nav-tab ${page === 'patio' ? 'is-active' : ''}`}
+              onClick={() => handlePageChange('patio')}
+            >
+              <span aria-hidden>🏠</span> House &amp; Awning
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={page === 'garden'}
+              className={`nav-tab ${page === 'garden' ? 'is-active' : ''}`}
+              onClick={() => handlePageChange('garden')}
+            >
+              <span aria-hidden>🌳</span> Trees &amp; Vegie Garden
+            </button>
+          </nav>
+          <p className="lede">
+            {page === 'patio'
+              ? 'Section through a glass door and sloped awning. Set the site, facing, and roof slope — then read how much winter sun can heat the room.'
+              : 'Position trees and a vegie garden enclosure on satellite map. Configure tree height, crown diameter, and tree groups to calculate direct sunlight and seasonal growing conditions.'}
+          </p>
+        </div>
+
         <div className="mast-tools">
           <ThemeSwitch value={themePref} onChange={setThemePref} />
           <div className="live">
@@ -76,19 +131,38 @@ export default function App() {
               {formatDate(YEAR, inputs.dayOfYear).label}
               <em>{formatTime(inputs.timeMinutes).label}</em>
             </span>
-            <span>
-              Door
-              <em>{formatFacing(inputs.facing).label}</em>
-            </span>
-            <span>
-              Daily
-              <em>{model.daily.heatKwh.toFixed(2)} kWh/m</em>
-            </span>
+            {page === 'patio' ? (
+              <>
+                <span>
+                  Door
+                  <em>{formatFacing(inputs.facing).label}</em>
+                </span>
+                <span>
+                  Daily
+                  <em>{model.daily.heatKwh.toFixed(2)} kWh/m</em>
+                </span>
+              </>
+            ) : (
+              <span>
+                Site
+                <em>{inputs.placeLabel ? inputs.placeLabel.split(',')[0] : 'Selected'}</em>
+              </span>
+            )}
           </div>
         </div>
       </header>
 
-      <div className="stage">
+      {page === 'garden' ? (
+        <GardenPage
+          sharedLat={inputs.lat}
+          sharedLon={inputs.lon}
+          sharedPlaceLabel={inputs.placeLabel}
+          sharedDayOfYear={inputs.dayOfYear}
+          sharedTimeMinutes={inputs.timeMinutes}
+        />
+      ) : (
+        <>
+          <div className="stage">
         <aside className="console">
           <div className="console-tools">
             <button type="button" onClick={() => setShowHints((v) => !v)}>
@@ -331,6 +405,8 @@ export default function App() {
           />
         </Popout>
       ) : null}
+        </>
+      )}
     </div>
   )
 }

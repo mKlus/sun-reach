@@ -1485,6 +1485,97 @@ footer.fine {
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* App Navigation & Garden Styles */
+.mast-middle {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nav-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  background: var(--lift);
+  border: 1px solid var(--hair-strong);
+  border-radius: 999px;
+  padding: 3px;
+  gap: 4px;
+}
+
+.nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+}
+
+.nav-tab:hover {
+  color: var(--ink);
+}
+
+.nav-tab.is-active {
+  background: var(--raised);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--hair-strong);
+}
+
+.tree-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: var(--lift);
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.mode-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.15s var(--ease);
+}
+
+.mode-btn:hover {
+  color: var(--ink);
+}
+
+.mode-btn.is-active {
+  background: var(--raised);
+  color: var(--ink);
+  font-weight: 600;
+  border: 1px solid var(--hair-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.tree-map-icon, .garden-map-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.section-canvas-wrap {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
