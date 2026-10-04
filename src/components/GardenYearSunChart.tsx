@@ -40,7 +40,7 @@ export function GardenYearSunChart({
     [series],
   )
   const minHours = useMemo(
-    () => series.reduce((m, p) => (m === 0 ? p.directSunHoursAvg : Math.min(m, p.directSunHoursAvg)), 0),
+    () => (series.length ? Math.min(...series.map((p) => p.directSunHoursAvg)) : 0),
     [series],
   )
 

@@ -150,7 +150,7 @@ export function GardenMap({
   const [mapType, setMapType] = useState<'streets' | 'satellite'>('streets')
 
   const gridCellsLatLng = useMemo(() => {
-    const cells = getGardenGrid(garden, 6, 8)
+    const cells = getGardenGrid(garden, 8, 12)
     return cells.map((c, i) => ({
       pos: offsetMeters(lat, lon, c.y, c.x),
       isSun: instant.gridStates[i] ?? true,
@@ -312,7 +312,7 @@ export function GardenMap({
         icon={treeIcon}
         draggable
         eventHandlers={{
-          drag(e) {
+          dragend(e) {
             const ll = e.target.getLatLng()
             onTreeLocation(ll.lat, ll.lng)
           },
@@ -329,10 +329,13 @@ export function GardenMap({
         icon={gardenIcon}
         draggable
         eventHandlers={{
-          drag(e) {
+          dragend(e) {
             const ll = e.target.getLatLng()
             const off = metersOffset(lat, lon, ll.lat, ll.lng)
-            onGardenOffset(off.east, off.north)
+            onGardenOffset(
+              Math.round(off.east * 10) / 10,
+              Math.round(off.north * 10) / 10,
+            )
           },
         }}
       >

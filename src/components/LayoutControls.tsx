@@ -6,6 +6,7 @@ import { SliderField } from './SliderField'
 type LayoutControlsProps = {
   tree: TreeConfig
   garden: GardenConfig
+  idPrefix?: string
   onPatchTree: (partial: Partial<TreeConfig>) => void
   onPatchGarden: (partial: Partial<GardenConfig>) => void
 }
@@ -13,6 +14,7 @@ type LayoutControlsProps = {
 export function LayoutControls({
   tree,
   garden,
+  idPrefix = 'layout',
   onPatchTree,
   onPatchGarden,
 }: LayoutControlsProps) {
@@ -32,8 +34,8 @@ export function LayoutControls({
   }
 
   // Nudge functions:
-  // If moving garden: positive north moves garden north (offsetNorth increases).
-  // If moving tree: moving tree north means garden is now further south relative to tree (offsetNorth decreases).
+  // Moving garden North increases offsetNorth.
+  // Moving tree North means tree moves +North, so garden is now -North relative to tree (offsetNorth decreases).
   function nudge(dEast: number, dNorth: number) {
     const mult = selectedTarget === 'garden' ? 1 : -1
     onPatchGarden({
@@ -44,7 +46,9 @@ export function LayoutControls({
 
   function rotateTarget(deltaDeg: number) {
     if (selectedTarget === 'tree') {
-      onPatchTree({ rotation: wrapDegrees(tree.rotation + deltaDeg) })
+      if (tree.mode === 'group') {
+        onPatchTree({ rotation: wrapDegrees(tree.rotation + deltaDeg) })
+      }
     } else {
       onPatchGarden({ rotation: wrapDegrees(garden.rotation + deltaDeg) })
     }
@@ -52,16 +56,19 @@ export function LayoutControls({
 
   function setRotationExact(deg: number) {
     if (selectedTarget === 'tree') {
-      onPatchTree({ rotation: wrapDegrees(deg) })
+      if (tree.mode === 'group') {
+        onPatchTree({ rotation: wrapDegrees(deg) })
+      }
     } else {
       onPatchGarden({ rotation: wrapDegrees(deg) })
     }
   }
 
   const currentRotation = selectedTarget === 'tree' ? tree.rotation : garden.rotation
+  const isTreeSingle = selectedTarget === 'tree' && tree.mode === 'single'
 
   return (
-    <div className="layout-controls" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div className="layout-controls" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Target Selector */}
       <div
         style={{
@@ -105,7 +112,7 @@ export function LayoutControls({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
           <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--muted)' }}>
-            Move {selectedTarget === 'garden' ? 'Vegie Garden' : 'Trees'}
+            Nudge {selectedTarget === 'garden' ? 'Vegie Garden' : 'Trees'}
           </span>
           <div style={{ display: 'flex', gap: 4 }}>
             {[0.5, 1.0, 2.5].map((s) => (
@@ -144,8 +151,8 @@ export function LayoutControls({
           <div />
           <button
             type="button"
-            title="Move North"
-            aria-label="Move North"
+            title={`Move ${selectedTarget === 'garden' ? 'Garden' : 'Tree'} North`}
+            aria-label={`Move ${selectedTarget === 'garden' ? 'Garden' : 'Tree'} North`}
             onClick={() => nudge(0, stepSize)}
             style={dPadBtnStyle}
           >
@@ -155,8 +162,8 @@ export function LayoutControls({
 
           <button
             type="button"
-            title="Move West"
-            aria-label="Move West"
+            title={`Move ${selectedTarget === 'garden' ? 'Garden' : 'Tree'} West`}
+            aria-label={`Move ${selectedTarget === 'garden' ? 'Garden' : 'Tree'} West`}
             onClick={() => nudge(-stepSize, 0)}
             style={dPadBtnStyle}
           >
@@ -177,8 +184,8 @@ export function LayoutControls({
           </div>
           <button
             type="button"
-            title="Move East"
-            aria-label="Move East"
+            title={`Move ${selectedTarget === 'garden' ? 'Garden' : 'Tree'} East`}
+            aria-label={`Move ${selectedTarget === 'garden' ? 'Garden' : 'Tree'} East`}
             onClick={() => nudge(stepSize, 0)}
             style={dPadBtnStyle}
           >
@@ -188,8 +195,8 @@ export function LayoutControls({
           <div />
           <button
             type="button"
-            title="Move South"
-            aria-label="Move South"
+            title={`Move ${selectedTarget === 'garden' ? 'Garden' : 'Tree'} South`}
+            aria-label={`Move ${selectedTarget === 'garden' ? 'Garden' : 'Tree'} South`}
             onClick={() => nudge(0, -stepSize)}
             style={dPadBtnStyle}
           >
@@ -199,8 +206,8 @@ export function LayoutControls({
         </div>
 
         <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
-          Offset: <strong>{garden.offsetEast >= 0 ? '+' : ''}{garden.offsetEast.toFixed(1)}m E</strong>,{' '}
-          <strong>{garden.offsetNorth >= 0 ? '+' : ''}{garden.offsetNorth.toFixed(1)}m N</strong>
+          Garden from trees: <strong>{garden.offsetEast >= 0 ? '+' : ''}{garden.offsetEast.toFixed(1)}m E</strong>,{' '}
+          <strong>{garden.offsetNorth >= 0 ? '+' : ''}{garden.offsetNorth.toFixed(1)}m N</strong> ({dist.toFixed(1)}m total)
         </div>
       </div>
 
@@ -220,51 +227,61 @@ export function LayoutControls({
           <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--muted)' }}>
             Rotate {selectedTarget === 'garden' ? 'Garden Bed' : 'Trees'}
           </span>
-          <strong style={{ fontSize: '0.85rem' }}>{formatFacing(currentRotation).label}</strong>
+          <strong style={{ fontSize: '0.85rem' }}>
+            {isTreeSingle ? 'Circular (N/A)' : formatFacing(currentRotation).label}
+          </strong>
         </div>
 
-        {/* Quick Rotation Buttons */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button type="button" onClick={() => rotateTarget(-45)} style={quickBtnStyle}>
-            ↺ −45°
-          </button>
-          <button type="button" onClick={() => rotateTarget(-15)} style={quickBtnStyle}>
-            ↺ −15°
-          </button>
-          <button type="button" onClick={() => rotateTarget(15)} style={quickBtnStyle}>
-            ↻ +15°
-          </button>
-          <button type="button" onClick={() => rotateTarget(45)} style={quickBtnStyle}>
-            ↻ +45°
-          </button>
-        </div>
+        {isTreeSingle ? (
+          <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--muted)', lineHeight: 1.35 }}>
+            Single tree canopy is round; orientation applies to <strong>Group / Row of Trees</strong>. Switch tree mode above to rotate a tree row or hedge.
+          </p>
+        ) : (
+          <>
+            {/* Quick Rotation Buttons */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => rotateTarget(-45)} style={quickBtnStyle}>
+                ↺ −45°
+              </button>
+              <button type="button" onClick={() => rotateTarget(-15)} style={quickBtnStyle}>
+                ↺ −15°
+              </button>
+              <button type="button" onClick={() => rotateTarget(15)} style={quickBtnStyle}>
+                ↻ +15°
+              </button>
+              <button type="button" onClick={() => rotateTarget(45)} style={quickBtnStyle}>
+                ↻ +45°
+              </button>
+            </div>
 
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button type="button" onClick={() => setRotationExact(0)} style={quickBtnStyle}>
-            North (0°)
-          </button>
-          <button type="button" onClick={() => setRotationExact(90)} style={quickBtnStyle}>
-            East (90°)
-          </button>
-          <button type="button" onClick={() => setRotationExact(180)} style={quickBtnStyle}>
-            South (180°)
-          </button>
-          <button type="button" onClick={() => setRotationExact(270)} style={quickBtnStyle}>
-            West (270°)
-          </button>
-        </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => setRotationExact(0)} style={quickBtnStyle}>
+                North (0°)
+              </button>
+              <button type="button" onClick={() => setRotationExact(90)} style={quickBtnStyle}>
+                East (90°)
+              </button>
+              <button type="button" onClick={() => setRotationExact(180)} style={quickBtnStyle}>
+                South (180°)
+              </button>
+              <button type="button" onClick={() => setRotationExact(270)} style={quickBtnStyle}>
+                West (270°)
+              </button>
+            </div>
 
-        <SliderField
-          id="in-rotation-active"
-          label={`${selectedTarget === 'garden' ? 'Garden' : 'Tree'} orientation`}
-          value={currentRotation}
-          min={0}
-          max={359}
-          step={1}
-          display={`${currentRotation}°`}
-          showHint={false}
-          onChange={(val) => setRotationExact(val)}
-        />
+            <SliderField
+              id={`${idPrefix}-rotation`}
+              label={`${selectedTarget === 'garden' ? 'Garden bed' : 'Tree row'} orientation`}
+              value={currentRotation}
+              min={0}
+              max={359}
+              step={1}
+              display={`${currentRotation}°`}
+              showHint={false}
+              onChange={(val) => setRotationExact(val)}
+            />
+          </>
+        )}
       </div>
 
       {/* Relative Placement Sliders */}
@@ -280,10 +297,10 @@ export function LayoutControls({
         }}
       >
         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--muted)' }}>
-          Distance &amp; Compass Placement
+          Distance &amp; Compass Direction
         </span>
         <SliderField
-          id="in-layout-dist"
+          id={`${idPrefix}-dist`}
           label="Separation distance"
           value={dist}
           min={0}
@@ -294,7 +311,7 @@ export function LayoutControls({
           onChange={(newDist) => setDistanceAndBearing(newDist, bearing)}
         />
         <SliderField
-          id="in-layout-bearing"
+          id={`${idPrefix}-bearing`}
           label="Direction of garden from tree"
           value={bearing}
           min={0}
@@ -311,28 +328,28 @@ export function LayoutControls({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <button
               type="button"
-              onClick={() => setDistanceAndBearing(Math.max(6, dist), 0)}
+              onClick={() => setDistanceAndBearing(Math.max(5, dist), 0)}
               style={quickBtnStyle}
             >
-              Garden North of Trees ☀️
+              Garden North of Trees
             </button>
             <button
               type="button"
-              onClick={() => setDistanceAndBearing(Math.max(6, dist), 180)}
+              onClick={() => setDistanceAndBearing(Math.max(5, dist), 180)}
               style={quickBtnStyle}
             >
               Garden South of Trees
             </button>
             <button
               type="button"
-              onClick={() => setDistanceAndBearing(Math.max(6, dist), 90)}
+              onClick={() => setDistanceAndBearing(Math.max(5, dist), 90)}
               style={quickBtnStyle}
             >
               Garden East of Trees
             </button>
             <button
               type="button"
-              onClick={() => setDistanceAndBearing(Math.max(6, dist), 270)}
+              onClick={() => setDistanceAndBearing(Math.max(5, dist), 270)}
               style={quickBtnStyle}
             >
               Garden West of Trees

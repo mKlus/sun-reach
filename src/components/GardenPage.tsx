@@ -87,7 +87,7 @@ export function GardenPage({
                 session.markPlaceTouched()
                 session.setLocation(lat, lon, true, label)
               }}
-              onTreeLocation={(lat, lon) => session.setLocation(lat, lon, false)}
+              onTreeLocation={(lat, lon) => session.setTreePosition(lat, lon)}
               onGardenOffset={(offsetEast, offsetNorth) => patchGarden({ offsetEast, offsetNorth })}
               onLocate={() => session.locateDevice()}
               onExpand={() => setPopout('map')}
@@ -153,7 +153,7 @@ export function GardenPage({
             dayMax={dayMax}
             showHints={showHints}
             onDay={(dayOfYear) => patch({ dayOfYear })}
-            onTime={(timeMinutes) => patch({ timeMinutes })}
+            onTime={(timeMinutes) => setClock(timeMinutes)}
             onPreset={session.applyPreset}
           />
 
@@ -300,7 +300,7 @@ export function GardenPage({
               session.markPlaceTouched()
               session.setLocation(lat, lon, true, label)
             }}
-            onTreeLocation={(lat, lon) => session.setLocation(lat, lon, false)}
+            onTreeLocation={(lat, lon) => session.setTreePosition(lat, lon)}
             onGardenOffset={(offsetEast, offsetNorth) => patchGarden({ offsetEast, offsetNorth })}
             onLocate={() => session.locateDevice()}
           />

@@ -11,7 +11,7 @@ import {
   type TreeConfig,
 } from './gardenModel'
 import { YEAR } from './model'
-import { dayOfYearOn, getDaylight, getTimezone, siteCivilNow } from './solar'
+import { dateFromDayOfYear, dayOfYearOn, getDaylight, getTimezone, siteCivilNow } from './solar'
 import type { DatePreset } from './useStudioSession'
 
 export function useGardenSession(initialInputs?: Partial<GardenInputs>) {
@@ -67,6 +67,32 @@ export function useGardenSession(initialInputs?: Partial<GardenInputs>) {
     if (shouldRecenter) {
       setRecenter((prev) => ({ id: prev.id + 1, lat, lon }))
     }
+  }
+
+  function setTreePosition(treeLat: number, treeLon: number) {
+    // When moving the tree directly on the map, maintain the garden's fixed geographic location
+    // by recalculating the offset between the new tree position and existing garden LatLng.
+    const currentGardenCenter = {
+      lat: inputs.lat + inputs.garden.offsetNorth / 111320,
+      lon: inputs.lon + inputs.garden.offsetEast / (111320 * Math.max(0.2, Math.cos((inputs.lat * Math.PI) / 180))),
+    }
+    const newOffsetNorth = (currentGardenCenter.lat - treeLat) * 111320
+    const newOffsetEast =
+      (currentGardenCenter.lon - treeLon) *
+      (111320 * Math.max(0.2, Math.cos((treeLat * Math.PI) / 180)))
+
+    setInputs((prev) =>
+      clampGardenInputs({
+        ...prev,
+        lat: treeLat,
+        lon: treeLon,
+        garden: {
+          ...prev.garden,
+          offsetEast: Math.round(newOffsetEast * 10) / 10,
+          offsetNorth: Math.round(newOffsetNorth * 10) / 10,
+        },
+      }),
+    )
   }
 
   function markPlaceTouched() {
@@ -161,10 +187,11 @@ export function useGardenSession(initialInputs?: Partial<GardenInputs>) {
     patch({ timeMinutes: 720 })
   }
 
-  // Daylight clamp
+  // Daylight clamp for current selected day
   function setClock(timeMinutes: number) {
-    const tz = getTimezone(inputs.lat, inputs.lon, YEAR, 1, 1)
-    const daylight = getDaylight(inputs.lat, inputs.lon, YEAR, 1, 1, tz.hours)
+    const date = dateFromDayOfYear(YEAR, inputs.dayOfYear)
+    const tz = getTimezone(inputs.lat, inputs.lon, date.year, date.month, date.day)
+    const daylight = getDaylight(inputs.lat, inputs.lon, date.year, date.month, date.day, tz.hours)
     const min = daylight.polar === 'night' ? 0 : daylight.sunriseMin
     const max = daylight.polar === 'night' ? 0 : daylight.sunsetMin
     patch({
@@ -195,5 +222,6 @@ export function useGardenSession(initialInputs?: Partial<GardenInputs>) {
     resetDefaults,
     applyPreset,
     setClock,
+    setTreePosition,
   }
 }

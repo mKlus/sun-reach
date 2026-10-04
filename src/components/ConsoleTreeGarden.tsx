@@ -16,7 +16,7 @@ import {
   type GardenConfig,
   type TreeConfig,
 } from '../lib/gardenModel'
-import { formatFacing, toDeg, toRad, wrapDegrees } from '../lib/solar'
+import { formatFacing } from '../lib/solar'
 import { LayoutControls } from './LayoutControls'
 import { SliderField } from './SliderField'
 
@@ -35,18 +35,6 @@ export function ConsoleTreeGarden({
   onPatchTree,
   onPatchGarden,
 }: ConsoleTreeGardenProps) {
-  // Distance and bearing from tree to garden
-  const dist = Math.hypot(garden.offsetEast, garden.offsetNorth)
-  const bearing = wrapDegrees(toDeg(Math.atan2(garden.offsetEast, garden.offsetNorth)))
-
-  function setDistanceAndBearing(newDist: number, newBearing: number) {
-    const rad = toRad(newBearing)
-    onPatchGarden({
-      offsetEast: Number((newDist * Math.sin(rad)).toFixed(2)),
-      offsetNorth: Number((newDist * Math.cos(rad)).toFixed(2)),
-    })
-  }
-
   return (
     <section className="block">
       <h2>
@@ -201,63 +189,13 @@ export function ConsoleTreeGarden({
         />
       </div>
 
-      {/* Placement relative to trees */}
+      {/* Layout, Move & Rotate Controls */}
       <div className="slider-group">
-        <p className="group-title">Garden Placement vs Trees</p>
-        <SliderField
-          id="in-garden-dist"
-          label="Distance from tree center"
-          value={dist}
-          min={0}
-          max={30}
-          step={0.25}
-          display={`${dist.toFixed(1)} m`}
-          hint="Distance between tree anchor and garden center."
-          showHint={showHints}
-          onChange={(newDist) => setDistanceAndBearing(newDist, bearing)}
-        />
-        <SliderField
-          id="in-garden-bearing"
-          label="Direction from tree center"
-          value={bearing}
-          min={0}
-          max={359}
-          step={1}
-          display={formatFacing(bearing).label}
-          hint="Compass bearing from the trees to the vegie garden (e.g. North in Southern hemisphere)."
-          showHint={showHints}
-          onChange={(newBearing) => setDistanceAndBearing(dist, newBearing)}
-        />
-        <SliderField
-          id="in-garden-north"
-          label="North / South offset"
-          value={garden.offsetNorth}
-          min={-30}
-          max={30}
-          step={0.5}
-          display={`${garden.offsetNorth >= 0 ? '+' : ''}${garden.offsetNorth.toFixed(1)} m N`}
-          showHint={false}
-          onChange={(offsetNorth) => onPatchGarden({ offsetNorth })}
-        />
-        <SliderField
-          id="in-garden-east"
-          label="East / West offset"
-          value={garden.offsetEast}
-          min={-30}
-          max={30}
-          step={0.5}
-          display={`${garden.offsetEast >= 0 ? '+' : ''}${garden.offsetEast.toFixed(1)} m E`}
-          showHint={false}
-          onChange={(offsetEast) => onPatchGarden({ offsetEast })}
-        />
-      </div>
-
-      {/* Secondary Quick Move & Rotation Controls */}
-      <div className="slider-group">
-        <p className="group-title">Move &amp; Rotate Controls</p>
+        <p className="group-title">Layout &amp; Move Controls</p>
         <LayoutControls
           tree={tree}
           garden={garden}
+          idPrefix="sidebar"
           onPatchTree={onPatchTree}
           onPatchGarden={onPatchGarden}
         />

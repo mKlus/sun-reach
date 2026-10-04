@@ -6,8 +6,11 @@ import {
   type GardenConfig,
   type TreeConfig,
 } from '../lib/gardenModel'
-import type { GardenInstantSun } from '../lib/gardenSolar'
-import { formatFacing, toDeg, toRad, wrapDegrees } from '../lib/solar'
+import {
+  getTreeShadowPolygons,
+  type GardenInstantSun,
+} from '../lib/gardenSolar'
+import { clamp, formatFacing, toDeg, toRad, wrapDegrees } from '../lib/solar'
 import { LayoutControls } from './LayoutControls'
 
 type GardenSunPlanProps = {
@@ -43,7 +46,9 @@ export function GardenSunPlan({
 }: GardenSunPlanProps) {
   const [viewMode, setViewMode] = useState<'plan' | 'nudge'>('plan')
   const [selectedItem, setSelectedItem] = useState<'none' | 'garden' | 'tree'>('garden')
-  const [dragMode, setDragMode] = useState<'none' | 'move-garden' | 'rotate-garden' | 'rotate-tree' | 'move-tree'>('none')
+  const [dragMode, setDragMode] = useState<
+    'none' | 'move-garden' | 'rotate-garden' | 'rotate-tree' | 'move-tree'
+  >('none')
 
   const svgRef = useRef<SVGSVGElement>(null)
   const cx = 100
@@ -52,20 +57,27 @@ export function GardenSunPlan({
 
   // Coordinate scaling: map ground metres to SVG coords
   const dist = Math.hypot(garden.offsetEast, garden.offsetNorth)
-  const maxM = Math.max(16, dist + Math.max(garden.width, garden.length) / 2 + 3)
-  const scale = 58 / maxM
+  const maxSpan = Math.max(tree.groupWidth, tree.diameter, garden.width, garden.length)
+  const maxM = Math.max(15, dist + maxSpan / 2 + 3)
+  const naturalScale = 58 / maxM
 
-  function toPlanSvg(eastM: number, northM: number) {
-    return {
-      x: cx + eastM * scale,
-      y: cy - northM * scale, // SVG Y is downwards, North is upwards
-    }
-  }
+  // Store locked scale and drag state during active pointer interaction to prevent jitter
+  const dragRef = useRef<{
+    mode: 'move-garden' | 'rotate-garden' | 'rotate-tree' | 'move-tree'
+    startClientX: number
+    startClientY: number
+    startOffsetEast: number
+    startOffsetNorth: number
+    startRotation: number
+    scale: number
+  } | null>(null)
 
-  function fromPlanSvg(svgX: number, svgY: number) {
+  const activeScale = dragRef.current ? dragRef.current.scale : naturalScale
+
+  function toPlanSvg(eastM: number, northM: number, s = activeScale) {
     return {
-      eastM: (svgX - cx) / scale,
-      northM: (cy - svgY) / scale,
+      x: cx + eastM * s,
+      y: cy - northM * s, // SVG Y is downwards, North is upwards
     }
   }
 
@@ -73,13 +85,24 @@ export function GardenSunPlan({
   const corners = getGardenCorners(garden).map((p) => toPlanSvg(p.x, p.y))
   const gardenPolyStr = corners.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
 
-  const gridCells = getGardenGrid(garden, 6, 8)
+  const gridCells = getGardenGrid(garden, 8, 12)
   const gardenCenterSvg = toPlanSvg(garden.offsetEast, garden.offsetNorth)
   const treeCenterSvg = toPlanSvg(0, 0)
 
+  // Shadow polygons on 2D plan
+  const shadowPolys = getTreeShadowPolygons(tree, sunAlt, sunAz)
+  const shadowSvgPolys = shadowPolys.map((poly) =>
+    poly.map(([e, n]) => {
+      const pt = toPlanSvg(e, n)
+      return `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`
+    }).join(' '),
+  )
+
   // Rotation handle positions
   const gardenRotHandleSvg = polar(gardenCenterSvg.x, gardenCenterSvg.y, 22, garden.rotation)
-  const treeRotHandleSvg = polar(treeCenterSvg.x, treeCenterSvg.y, (tree.diameter / 2) * scale + 12, tree.rotation)
+  const treeSpan = tree.mode === 'group' ? Math.max(tree.diameter, tree.groupWidth) : tree.diameter
+  const treeHandleR = (treeSpan / 2) * activeScale + 14
+  const treeRotHandleSvg = polar(treeCenterSvg.x, treeCenterSvg.y, treeHandleR, tree.rotation)
 
   const ticks = Array.from({ length: 72 }, (_, i) => {
     const deg = i * 5
@@ -96,53 +119,77 @@ export function GardenSunPlan({
       ? 'Sun is below the horizon (night)'
       : `Sun ${formatFacing(sunAz).name} (${sunAlt.toFixed(0)}° alt) · ${instant.sunlitPercent.toFixed(0)}% of vegie garden in direct sun`
 
-  // SVG Pointer Event Handlers for Direct Manipulation
-  function handlePointerDown(e: React.PointerEvent<SVGElement>, mode: typeof dragMode) {
-    if (!onPatchGarden || !onPatchTree) return
+  // Delta-based Pointer Event Handlers for Direct Manipulation
+  function handlePointerDown(
+    e: React.PointerEvent<SVGElement>,
+    mode: 'move-garden' | 'rotate-garden' | 'rotate-tree' | 'move-tree',
+  ) {
+    if (!onPatchGarden || !onPatchTree || !svgRef.current) return
     e.preventDefault()
     e.stopPropagation()
     setDragMode(mode)
-    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+    dragRef.current = {
+      mode,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startOffsetEast: garden.offsetEast,
+      startOffsetNorth: garden.offsetNorth,
+      startRotation: mode === 'rotate-tree' ? tree.rotation : garden.rotation,
+      scale: naturalScale,
+    }
+    ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
   }
 
   function handlePointerMove(e: React.PointerEvent<SVGSVGElement>) {
-    if (dragMode === 'none' || !svgRef.current || !onPatchGarden || !onPatchTree) return
+    const d = dragRef.current
+    if (!d || !svgRef.current || !onPatchGarden || !onPatchTree) return
     const rect = svgRef.current.getBoundingClientRect()
-    // Map client coordinates to 0..200 SVG coordinates:
-    const svgX = ((e.clientX - rect.left) / rect.width) * 200
-    const svgY = ((e.clientY - rect.top) / rect.height) * 200
-    const { eastM, northM } = fromPlanSvg(svgX, svgY)
+    if (rect.width <= 0 || rect.height <= 0) return
 
-    if (dragMode === 'move-garden') {
-      onPatchGarden({
-        offsetEast: Number(eastM.toFixed(1)),
-        offsetNorth: Number(northM.toFixed(1)),
-      })
-    } else if (dragMode === 'move-tree') {
-      // Moving tree moves garden in relative opposition
-      onPatchGarden({
-        offsetEast: Number((-eastM).toFixed(1)),
-        offsetNorth: Number((-northM).toFixed(1)),
-      })
-    } else if (dragMode === 'rotate-garden') {
+    // Delta in SVG units (viewBox 200x200):
+    const dSvgX = ((e.clientX - d.startClientX) / rect.width) * 200
+    const dSvgY = ((e.clientY - d.startClientY) / rect.height) * 200
+
+    // Delta in ground metres:
+    const dEast = dSvgX / d.scale
+    const dNorth = -dSvgY / d.scale // SVG Y is downwards, North is upwards
+
+    if (d.mode === 'move-garden') {
+      const nextEast = clamp(Number((d.startOffsetEast + dEast).toFixed(1)), -30, 30)
+      const nextNorth = clamp(Number((d.startOffsetNorth + dNorth).toFixed(1)), -30, 30)
+      onPatchGarden({ offsetEast: nextEast, offsetNorth: nextNorth })
+    } else if (d.mode === 'move-tree') {
+      // Moving tree moves tree, so relative to tree, garden offset is inverted:
+      const nextEast = clamp(Number((d.startOffsetEast - dEast).toFixed(1)), -30, 30)
+      const nextNorth = clamp(Number((d.startOffsetNorth - dNorth).toFixed(1)), -30, 30)
+      onPatchGarden({ offsetEast: nextEast, offsetNorth: nextNorth })
+    } else if (d.mode === 'rotate-garden') {
+      const svgX = ((e.clientX - rect.left) / rect.width) * 200
+      const svgY = ((e.clientY - rect.top) / rect.height) * 200
       const dx = svgX - gardenCenterSvg.x
       const dy = gardenCenterSvg.y - svgY // North is up
-      const angle = wrapDegrees(toDeg(Math.atan2(dx, dy)))
-      onPatchGarden({ rotation: Math.round(angle) })
-    } else if (dragMode === 'rotate-tree') {
+      const angle = wrapDegrees(Math.round(toDeg(Math.atan2(dx, dy))))
+      onPatchGarden({ rotation: angle })
+    } else if (d.mode === 'rotate-tree') {
+      const svgX = ((e.clientX - rect.left) / rect.width) * 200
+      const svgY = ((e.clientY - rect.top) / rect.height) * 200
       const dx = svgX - treeCenterSvg.x
-      const dy = treeCenterSvg.y - svgY
-      const angle = wrapDegrees(toDeg(Math.atan2(dx, dy)))
-      onPatchTree({ rotation: Math.round(angle) })
+      const dy = treeCenterSvg.y - svgY // North is up
+      const angle = wrapDegrees(Math.round(toDeg(Math.atan2(dx, dy))))
+      onPatchTree({ rotation: angle })
     }
   }
 
   function handlePointerUp() {
+    dragRef.current = null
     setDragMode('none')
   }
 
   return (
-    <figure className={`sun-plan ${instant.status === 'full-sun' ? 'is-on' : 'is-off'}`} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <figure
+      className={`sun-plan ${instant.status === 'full-sun' ? 'is-on' : 'is-off'}`}
+      style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+    >
       {/* View Switcher: Interactive Plan vs Move & Rotate Panel */}
       {onPatchGarden && onPatchTree ? (
         <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 4 }}>
@@ -170,6 +217,7 @@ export function GardenSunPlan({
           <LayoutControls
             tree={tree}
             garden={garden}
+            idPrefix="plan"
             onPatchTree={onPatchTree}
             onPatchGarden={onPatchGarden}
           />
@@ -244,7 +292,7 @@ export function GardenSunPlan({
               />
             ) : null}
 
-            {/* Sun Beam Vector */}
+            {/* Sun Beam Vector from perimeter */}
             {sunAlt > 0 ? (
               <>
                 <line
@@ -255,14 +303,14 @@ export function GardenSunPlan({
                   stroke="#ff8a3c"
                   strokeWidth={1.5}
                   strokeDasharray="4, 3"
-                  opacity={0.7}
+                  opacity={0.65}
                 />
                 <circle cx={sunPt.x} cy={sunPt.y} r={7} fill="#ff8a3c" />
                 <circle cx={sunPt.x} cy={sunPt.y} r={4} fill="#fff" />
               </>
             ) : null}
 
-            {/* Connecting Line Between Tree & Garden Center */}
+            {/* Connecting Distance Line Between Tree & Garden Center */}
             <line
               x1={treeCenterSvg.x}
               y1={treeCenterSvg.y}
@@ -274,10 +322,22 @@ export function GardenSunPlan({
               opacity={0.6}
             />
 
+            {/* Tree Shadows on Ground */}
+            {shadowSvgPolys.map((polyStr, i) => (
+              <polygon
+                key={`shadow-${i}`}
+                points={polyStr}
+                fill="#121813"
+                fillOpacity={0.48}
+                stroke="#0e140f"
+                strokeWidth={0.7}
+              />
+            ))}
+
             {/* Vegie Garden Enclosure Outline & Drag Group */}
             <g
               onClick={() => setSelectedItem('garden')}
-              style={{ cursor: 'grab' }}
+              style={{ cursor: dragMode === 'move-garden' ? 'grabbing' : 'grab' }}
               onPointerDown={(e) => {
                 setSelectedItem('garden')
                 handlePointerDown(e, 'move-garden')
@@ -285,7 +345,11 @@ export function GardenSunPlan({
             >
               <polygon
                 points={gardenPolyStr}
-                fill={selectedItem === 'garden' ? 'rgba(224, 122, 47, 0.18)' : 'rgba(43, 110, 79, 0.15)'}
+                fill={
+                  selectedItem === 'garden'
+                    ? 'rgba(224, 122, 47, 0.22)'
+                    : 'rgba(43, 110, 79, 0.16)'
+                }
                 stroke={selectedItem === 'garden' ? '#ff9800' : '#e07a2f'}
                 strokeWidth={selectedItem === 'garden' ? 2.5 : 1.8}
               />
@@ -301,14 +365,28 @@ export function GardenSunPlan({
                     cy={pt.y}
                     r={1.8}
                     fill={isSun ? '#48bb78' : '#4a5568'}
-                    opacity={0.88}
+                    opacity={0.9}
                   />
                 )
               })}
 
               {/* Garden Center Drag Anchor Icon */}
-              <circle cx={gardenCenterSvg.x} cy={gardenCenterSvg.y} r={4} fill="#e07a2f" />
-              <text x={gardenCenterSvg.x} y={gardenCenterSvg.y - 6} fill="var(--ink)" fontSize={8} fontWeight={600} textAnchor="middle">
+              <circle
+                cx={gardenCenterSvg.x}
+                cy={gardenCenterSvg.y}
+                r={4.5}
+                fill="#e07a2f"
+                stroke="#fff"
+                strokeWidth={1}
+              />
+              <text
+                x={gardenCenterSvg.x}
+                y={gardenCenterSvg.y - 7}
+                fill="var(--ink)"
+                fontSize={8}
+                fontWeight={600}
+                textAnchor="middle"
+              >
                 🥕
               </text>
             </g>
@@ -322,16 +400,17 @@ export function GardenSunPlan({
                   x2={gardenRotHandleSvg.x}
                   y2={gardenRotHandleSvg.y}
                   stroke="#ff9800"
-                  strokeWidth={1.5}
+                  strokeWidth={1.8}
+                  strokeDasharray="2, 1"
                 />
                 <circle
                   cx={gardenRotHandleSvg.x}
                   cy={gardenRotHandleSvg.y}
-                  r={5}
+                  r={5.5}
                   fill="#ff9800"
                   stroke="#fff"
                   strokeWidth={1.5}
-                  style={{ cursor: 'crosshair' }}
+                  style={{ cursor: dragMode === 'rotate-garden' ? 'grabbing' : 'crosshair' }}
                   onPointerDown={(e) => handlePointerDown(e, 'rotate-garden')}
                 />
               </g>
@@ -340,7 +419,7 @@ export function GardenSunPlan({
             {/* Trees Group & Drag Anchor */}
             <g
               onClick={() => setSelectedItem('tree')}
-              style={{ cursor: 'grab' }}
+              style={{ cursor: dragMode === 'move-tree' ? 'grabbing' : 'grab' }}
               onPointerDown={(e) => {
                 setSelectedItem('tree')
                 handlePointerDown(e, 'move-tree')
@@ -348,7 +427,7 @@ export function GardenSunPlan({
             >
               {trees.map((t) => {
                 const p = toPlanSvg(t.x, t.y)
-                const rPx = t.crownRadius * scale
+                const rPx = t.crownRadius * activeScale
                 return (
                   <g key={t.id}>
                     <circle
@@ -356,7 +435,7 @@ export function GardenSunPlan({
                       cy={p.y}
                       r={Math.max(3, rPx)}
                       fill={selectedItem === 'tree' ? '#48bb78' : '#34a853'}
-                      fillOpacity={0.68}
+                      fillOpacity={0.7}
                       stroke={selectedItem === 'tree' ? '#fff' : '#1e7b34'}
                       strokeWidth={selectedItem === 'tree' ? 2 : 1.5}
                     />
@@ -366,14 +445,28 @@ export function GardenSunPlan({
               })}
 
               {/* Tree Center Anchor */}
-              <circle cx={treeCenterSvg.x} cy={treeCenterSvg.y} r={3.5} fill="#2e7d32" />
-              <text x={treeCenterSvg.x} y={treeCenterSvg.y - 6} fill="var(--ink)" fontSize={8} fontWeight={600} textAnchor="middle">
+              <circle
+                cx={treeCenterSvg.x}
+                cy={treeCenterSvg.y}
+                r={4}
+                fill="#2e7d32"
+                stroke="#fff"
+                strokeWidth={1}
+              />
+              <text
+                x={treeCenterSvg.x}
+                y={treeCenterSvg.y - 7}
+                fill="var(--ink)"
+                fontSize={8}
+                fontWeight={600}
+                textAnchor="middle"
+              >
                 🌳
               </text>
             </g>
 
-            {/* Tree Rotation Lever & Handle */}
-            {selectedItem === 'tree' && onPatchTree ? (
+            {/* Tree Rotation Lever & Handle (Only for Tree Groups/Rows) */}
+            {selectedItem === 'tree' && tree.mode === 'group' && onPatchTree ? (
               <g>
                 <line
                   x1={treeCenterSvg.x}
@@ -381,21 +474,23 @@ export function GardenSunPlan({
                   x2={treeRotHandleSvg.x}
                   y2={treeRotHandleSvg.y}
                   stroke="#34a853"
-                  strokeWidth={1.5}
+                  strokeWidth={1.8}
+                  strokeDasharray="2, 1"
                 />
                 <circle
                   cx={treeRotHandleSvg.x}
                   cy={treeRotHandleSvg.y}
-                  r={5}
+                  r={5.5}
                   fill="#34a853"
                   stroke="#fff"
                   strokeWidth={1.5}
-                  style={{ cursor: 'crosshair' }}
+                  style={{ cursor: dragMode === 'rotate-tree' ? 'grabbing' : 'crosshair' }}
                   onPointerDown={(e) => handlePointerDown(e, 'rotate-tree')}
                 />
               </g>
             ) : null}
           </svg>
+
           <figcaption style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--muted)' }}>
             {caption}
             <br />

@@ -68,8 +68,8 @@ export const DEFAULT_GARDEN_INPUTS: GardenInputs = {
     width: 3.0,
     length: 6.0,
     rotation: 0, // North-South bed
-    offsetEast: 2.0,
-    offsetNorth: 7.0, // 7m North of tree row (optimal for Southern hemisphere)
+    offsetEast: 1.5,
+    offsetNorth: -6.0, // 6m South of tree row (shaded by winter sun in Southern hemisphere)
   },
 }
 
