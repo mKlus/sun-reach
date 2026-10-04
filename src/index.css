@@ -1569,7 +1569,7 @@ footer.fine {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 
-.tree-map-icon, .garden-map-icon {
+.tree-map-icon, .garden-map-icon, .garden-resize-icon, .garden-rotate-icon {
   background: transparent !important;
   border: none !important;
 }
@@ -1578,6 +1578,59 @@ footer.fine {
   width: 100%;
   border-radius: 12px;
   overflow: hidden;
+}
+
+/* Simplified Garden Page: Map + Essential Sliders Only */
+.garden-clean-page {
+  width: 100%;
+  padding: 0 24px 32px;
+  max-width: 1720px;
+  margin: 0 auto;
+}
+
+.garden-clean-layout {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 20px;
+  align-items: stretch;
+  min-height: calc(100vh - 120px);
+}
+
+.garden-clean-sidebar {
+  background: var(--raised);
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--radius);
+  padding: 18px 20px 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+}
+
+.garden-clean-map-wrap {
+  position: relative;
+  background: var(--raised);
+  border: 1px solid var(--hair-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  min-height: 650px;
+  height: 100%;
+}
+
+.garden-clean-map-wrap .map-el {
+  width: 100%;
+  height: 100%;
+  min-height: 650px;
+}
+
+@media (max-width: 980px) {
+  .garden-clean-layout {
+    grid-template-columns: 1fr;
+  }
+  .garden-clean-map-wrap {
+    min-height: 500px;
+    height: 500px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
